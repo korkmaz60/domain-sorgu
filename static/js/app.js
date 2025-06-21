@@ -47,13 +47,23 @@ class App {
         
         // AI toggle
         window.uiManager.setupAIToggle();
-        window.aiToggle.setupAIToggle();
         
         // Keyboard shortcuts
         window.uiManager.setupKeyboardShortcuts();
         
-        // AI ayarlarını yükle
+        // AI ayarlarını yükle ve toggle'ı başlat
         window.settingsManager.loadAISettings();
+        window.aiToggle.setupAIToggle();
+        
+        // İlk yüklemede AI durumunu kontrol et
+        const savedAIEnabled = localStorage.getItem('ai_enabled') === 'true';
+        const hasApiKey = window.domainSearch.aiConfig.apiKey && window.domainSearch.aiConfig.model;
+        
+        // Eğer API anahtarı yoksa ama AI açıksa, kapat
+        if (savedAIEnabled && !hasApiKey) {
+            window.domainSearch.aiConfig.enabled = false;
+            localStorage.setItem('ai_enabled', 'false');
+        }
         
         // AI toggle UI'sını güncelle
         window.aiToggle.updateAIToggleUI();

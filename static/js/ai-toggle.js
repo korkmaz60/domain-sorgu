@@ -22,27 +22,59 @@ class AIToggle {
     }
 
     updateAIToggleUI() {
-        const toggleBtn = document.getElementById('ai-toggle');
-        const aiStatus = document.getElementById('ai-status');
+        const toggleBtn = document.getElementById('ai-toggle-btn');
+        const aiStatusText = document.getElementById('ai-status-text');
+        const toggleSwitch = document.getElementById('ai-toggle-switch');
+        const aiQuickSettings = document.getElementById('ai-quick-settings');
+        const apiKeyStatus = document.getElementById('api-key-status');
+        const modelStatus = document.getElementById('model-status');
         
-        if (!toggleBtn || !aiStatus) return;
+        if (!toggleBtn || !aiStatusText || !toggleSwitch) return;
         
         const isEnabled = window.domainSearch.aiConfig.enabled;
         const hasApiKey = window.domainSearch.aiConfig.apiKey && window.domainSearch.aiConfig.model;
         
-        // Buton durumunu güncelle
-        if (isEnabled && hasApiKey) {
-            toggleBtn.className = 'px-4 py-2 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors flex items-center space-x-2';
-            toggleBtn.innerHTML = '<i class="fas fa-robot"></i><span>AI Aktif</span>';
-            aiStatus.innerHTML = '<i class="fas fa-check-circle text-green-500"></i><span class="text-green-700">AI Önerileri Aktif</span>';
-        } else if (isEnabled && !hasApiKey) {
-            toggleBtn.className = 'px-4 py-2 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition-colors flex items-center space-x-2';
-            toggleBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Ayar Gerekli</span>';
-            aiStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-yellow-500"></i><span class="text-yellow-700">API Anahtarı Gerekli</span>';
+        // Toggle switch'i güncelle
+        if (isEnabled) {
+            toggleBtn.classList.remove('bg-gray-200');
+            toggleBtn.classList.add('bg-purple-600');
+            toggleSwitch.classList.remove('translate-x-1');
+            toggleSwitch.classList.add('translate-x-6');
         } else {
-            toggleBtn.className = 'px-4 py-2 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors flex items-center space-x-2';
-            toggleBtn.innerHTML = '<i class="fas fa-robot"></i><span>AI Kapalı</span>';
-            aiStatus.innerHTML = '<i class="fas fa-times-circle text-gray-500"></i><span class="text-gray-700">AI Önerileri Kapalı</span>';
+            toggleBtn.classList.remove('bg-purple-600');
+            toggleBtn.classList.add('bg-gray-200');
+            toggleSwitch.classList.remove('translate-x-6');
+            toggleSwitch.classList.add('translate-x-1');
+        }
+        
+        // Status text'i güncelle
+        if (isEnabled && hasApiKey) {
+            aiStatusText.textContent = 'Aktif';
+            aiStatusText.className = 'text-sm font-medium text-green-600';
+        } else if (isEnabled && !hasApiKey) {
+            aiStatusText.textContent = 'Ayar Gerekli';
+            aiStatusText.className = 'text-sm font-medium text-yellow-600';
+        } else {
+            aiStatusText.textContent = 'Kapalı';
+            aiStatusText.className = 'text-sm font-medium text-gray-600';
+        }
+        
+        // Quick settings'i göster/gizle ve güncelle
+        if (aiQuickSettings) {
+            if (isEnabled) {
+                aiQuickSettings.classList.remove('hidden');
+                
+                if (apiKeyStatus) {
+                    apiKeyStatus.textContent = hasApiKey ? 'API Key: Girildi' : 'API Key: Girilmedi';
+                }
+                
+                if (modelStatus) {
+                    const modelName = this.getModelDisplayName(window.domainSearch.aiConfig.model);
+                    modelStatus.textContent = window.domainSearch.aiConfig.model ? `Model: ${modelName}` : 'Model: Seçilmedi';
+                }
+            } else {
+                aiQuickSettings.classList.add('hidden');
+            }
         }
     }
 

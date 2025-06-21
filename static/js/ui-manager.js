@@ -172,9 +172,23 @@ class UIManager {
     }
 
     setupAIToggle() {
-        const aiToggleBtn = document.getElementById('ai-toggle');
+        const aiToggleBtn = document.getElementById('ai-toggle-btn');
+        const quickSettingsBtn = document.getElementById('quick-settings-btn');
+        
         if (aiToggleBtn) {
             aiToggleBtn.addEventListener('click', () => window.aiToggle.toggleAI());
+        }
+        
+        if (quickSettingsBtn) {
+            quickSettingsBtn.addEventListener('click', () => {
+                const settingsModal = document.getElementById('settings-modal');
+                if (settingsModal) {
+                    settingsModal.classList.remove('hidden');
+                    settingsModal.classList.add('flex');
+                    window.settingsManager.loadAISettings();
+                    this.switchSettingsTab('ai-settings');
+                }
+            });
         }
     }
 

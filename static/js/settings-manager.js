@@ -89,6 +89,10 @@ class SettingsManager {
         if (apiKey && model) {
             window.domainSearch.aiConfig.enabled = true;
             localStorage.setItem('ai_enabled', 'true');
+        } else {
+            // API key veya model eksikse AI'yı devre dışı bırak
+            window.domainSearch.aiConfig.enabled = false;
+            localStorage.setItem('ai_enabled', 'false');
         }
         
         window.aiToggle.updateAIToggleUI();
