@@ -5,6 +5,10 @@ class ResultRenderer {
 
     createResultHTML(result) {
         const status = result.available;
+        
+        // Rate limit kontrolü
+        const isRateLimit = result.status && result.status.includes('Rate Limit');
+        
         const palette = status === true ? {
             border: 'border-green-500',
             bg: 'bg-green-50',
@@ -19,6 +23,13 @@ class ResultRenderer {
             text: 'text-red-800',
             icon: 'fa-times',
             label: 'KAYITLI'
+        } : isRateLimit ? {
+            border: 'border-orange-500',
+            bg: 'bg-orange-50',
+            iconBg: 'bg-orange-100',
+            text: 'text-orange-800',
+            icon: 'fa-clock',
+            label: 'RATE LIMIT'
         } : {
             border: 'border-yellow-500',
             bg: 'bg-yellow-50',
@@ -42,6 +53,28 @@ class ResultRenderer {
 
         const apiProvider = result.provider || 'whois';
         const apiLabel = apiProvider === 'porkbun' ? 'Porkbun API' : 'WHOIS';
+        
+        // Porkbun API için ek bilgileri göster
+        let additionalInfo = '';
+        if (result.provider === 'porkbun') {
+            let porkbunDetails = '';
+            
+            if (result.price && result.price !== '-' && result.price !== 'Bilinmiyor') {
+                porkbunDetails += `<div class="text-sm text-green-600 font-medium">💰 Fiyat: $${result.price}</div>`;
+            }
+            
+            if (result.renewal_price && result.renewal_price !== '-') {
+                porkbunDetails += `<div class="text-sm text-blue-600">🔄 Yenileme: $${result.renewal_price}</div>`;
+            }
+            
+            if (result.raw_avail) {
+                porkbunDetails += `<div class="text-xs text-gray-500">🔍 Raw Status: ${result.raw_avail}</div>`;
+            }
+            
+            if (porkbunDetails) {
+                additionalInfo = `<div class="mt-3 pt-3 border-t border-gray-200">${porkbunDetails}</div>`;
+            }
+        }
 
         return `
             <div class="bg-white rounded-2xl shadow-xl p-6 mb-4 card-hover border-l-4 ${palette.border} animate-fade-in">
@@ -52,9 +85,12 @@ class ResultRenderer {
                     <div class="flex-1">
                         <h4 class="text-xl font-bold text-gray-800 mb-1">${result.domain}</h4>
                         <p class="text-sm text-gray-500">API: ${apiLabel}</p>
+                        ${result.status ? `<p class="text-sm text-gray-600">Status: ${result.status}</p>` : ''}
                     </div>
                     <span class="px-3 py-1 rounded-full text-xs font-semibold ${palette.bg} ${palette.text}">${palette.label}</span>
                 </div>
+                
+                ${additionalInfo}
 
                 <div class="flex flex-wrap items-center justify-between gap-3 mt-4">
                     <div class="flex items-center space-x-2 text-sm text-gray-500">

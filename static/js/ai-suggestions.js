@@ -9,7 +9,31 @@ class AISuggestions {
     async getAISuggestions(baseName, isMore = false) {
         // AI devre dışıysa çık
         if (!window.domainSearch.aiConfig.enabled) {
+            console.log('AI devre dışı');
             return;
+        }
+        
+        // API key ve model kontrolü
+        if (!window.domainSearch.aiConfig.apiKey || !window.domainSearch.aiConfig.model) {
+            console.log('API key veya model eksik');
+            const aiSuggestions = document.getElementById('ai-suggestions');
+            const aiResults = document.getElementById('ai-results');
+            aiSuggestions.classList.remove('hidden');
+            aiResults.innerHTML = `
+                <div class="bg-yellow-100 border border-yellow-200 rounded-xl p-6 text-center">
+                    <i class="fas fa-exclamation-triangle text-2xl text-yellow-600 mb-2"></i>
+                    <p class="text-yellow-700 font-medium">AI önerileri için API anahtarı ve model seçimi gerekli!</p>
+                    <button onclick="document.getElementById('settings-btn').click()" class="mt-3 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
+                        Ayarları Aç
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        // Base name'i set et
+        if (!isMore) {
+            this.currentBaseName = baseName;
         }
         
         const aiSuggestions = document.getElementById('ai-suggestions');
@@ -91,6 +115,8 @@ class AISuggestions {
     }
 
     async callOpenRouterAPI(baseName, isMore = false) {
+        console.log('🤖 AI API çağrısı başlıyor:', { baseName, isMore, apiKey: window.domainSearch.aiConfig.apiKey ? 'Var' : 'Yok', model: window.domainSearch.aiConfig.model });
+        
         let prompt;
         
         if (isMore && this.usedSuggestions.size > 0) {
@@ -104,6 +130,8 @@ Tamamen farklı ve yeni öneriler ver.`;
             prompt = `"${baseName}" isimli domain için benzer 5 alternatif domain adı öner. Sadece domain adını ver (uzantı olmadan). Her öneri yeni satırda olsun. Yaratıcı, akılda kalıcı ve brandable öneriler ver.`;
         }
 
+        console.log('📤 OpenRouter API isteği gönderiliyor:', { model: window.domainSearch.aiConfig.model, prompt });
+        
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -121,10 +149,13 @@ Tamamen farklı ve yeni öneriler ver.`;
         });
 
         if (!response.ok) {
+            const errorData = await response.text();
+            console.error('❌ OpenRouter API hatası:', response.status, response.statusText, errorData);
             throw new Error(`OpenRouter API hatası: ${response.statusText}`);
         }
 
         const data = await response.json();
+        console.log('📥 OpenRouter API yanıtı:', data);
         const content = data.choices[0]?.message?.content || '';
         
         // AI yanıtını parse et
@@ -134,6 +165,8 @@ Tamamen farklı ve yeni öneriler ver.`;
             .filter(line => line && !line.includes('.'))
             .filter(line => !this.usedSuggestions.has(line.toLowerCase()))
             .slice(0, 5);
+
+        console.log('🎯 Parse edilen öneriler:', suggestions);
 
         // Yeni önerileri kullanılan listesine ekle
         suggestions.forEach(suggestion => {
@@ -197,29 +230,54 @@ Tamamen farklı ve yeni öneriler ver.`;
         container.appendChild(resultDiv);
 
         try {
-            const requestBody = { 
-                domain,
-                provider: window.domainSearch.searchConfig.provider
-            };
-
-            if (window.domainSearch.searchConfig.provider === 'porkbun') {
-                requestBody.porkbunApiKey = window.domainSearch.searchConfig.porkbunApiKey;
-                requestBody.porkbunSecretKey = window.domainSearch.searchConfig.porkbunSecretKey;
-            }
-
-            const response = await fetch('/api/check-domain', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const result = await response.json();
+            const result = await this.checkAIDomain(domain);
             this.updateAIResult(resultDiv, domain, result);
         } catch (error) {
             this.updateAIResult(resultDiv, domain, { available: null, error: 'Kontrol hatası' });
         }
+    }
+
+    // Yardımcı fonksiyon - AI domain kontrolü
+    async checkAIDomain(domain) {
+        // Porkbun API kullanılıyorsa global rate limit manager'ı kullan
+        if (window.domainSearch.searchConfig.provider === 'porkbun' && window.globalRateLimitManager) {
+            console.log(`🤖 AI using rate limit manager for: ${domain}`);
+            return await window.globalRateLimitManager.makeRequest(domain, async () => {
+                return await this.makeDirectAIAPICall(domain);
+            });
+        } else {
+            // WHOIS için direkt çağrı
+            console.log(`🤖 AI direct API call for: ${domain}`);
+            return await this.makeDirectAIAPICall(domain);
+        }
+    }
+
+    // Direkt API çağrısı (AI için)
+    async makeDirectAIAPICall(domain) {
+        const requestBody = { 
+            domain,
+            provider: window.domainSearch.searchConfig.provider
+        };
+
+        if (window.domainSearch.searchConfig.provider === 'porkbun') {
+            requestBody.porkbunApiKey = window.domainSearch.searchConfig.porkbunApiKey;
+            requestBody.porkbunSecretKey = window.domainSearch.searchConfig.porkbunSecretKey;
+        }
+
+        console.log(`🤖 AI making API call for: ${domain} via ${window.domainSearch.searchConfig.provider}`);
+
+        const response = await fetch('/api/check-domain', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const result = await response.json();
+        console.log(`🤖 AI API response for ${domain}: ${result.status}`);
+        
+        return result;
     }
 
     updateAIResult(resultDiv, domain, result) {

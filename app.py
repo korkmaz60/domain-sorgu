@@ -5,6 +5,10 @@ import requests
 from datetime import datetime
 import threading
 import time
+import urllib3
+
+# SSL warning'lerini kapat
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
@@ -73,6 +77,7 @@ class DomainChecker:
         try:
             # Porkbun domain check API'si - doğru endpoint
             url = f'https://api.porkbun.com/api/json/v3/domain/checkDomain/{domain}'
+            print(f"🌐 Porkbun API URL: {url}")
             payload = {
                 'apikey': api_key,
                 'secretapikey': secret_key
@@ -83,7 +88,11 @@ class DomainChecker:
                 'User-Agent': 'Domain-Checker/1.0'
             }
             
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            response = requests.post(url, json=payload, headers=headers, timeout=10, verify=False)
+            
+            print(f"📡 HTTP Status: {response.status_code}")
+            print(f"📋 Response Headers: {dict(response.headers)}")
+            print(f"📄 Raw Response: {response.text[:500]}...")
             
             # HTTP status kontrolü
             if response.status_code != 200:
@@ -113,23 +122,57 @@ class DomainChecker:
                     'error': 'Geçersiz JSON yanıtı'
                 }
             
+            # Rate limit kontrolü ÖNCE yapılmalı (SUCCESS/ERROR fark etmez)
+            limits = data.get('limits', {})
+            if limits and limits.get('used', 0) >= limits.get('limit', 1):
+                wait_seconds = limits.get('TTL', 12)
+                natural_message = limits.get('naturalLanguage', f'{wait_seconds} saniye bekleyin')
+                
+                print(f"🚫 RATE LIMIT DETECTED for {domain} - {natural_message}")
+                
+                return {
+                    'domain': domain,
+                    'available': None,
+                    'status': 'Rate Limit',
+                    'creation_date': '-',
+                    'expiration_date': '-',
+                    'registrar': '-',
+                    'provider': 'Porkbun',
+                    'error': f'Rate limit: {natural_message}',
+                    'rate_limit': True,
+                    'wait_seconds': wait_seconds,
+                    'retry_after': wait_seconds,
+                    'limits_info': limits
+                }
+            
             if data.get('status') == 'SUCCESS':
                 response_data = data.get('response', {})
-                # Porkbun API: "yes" = müsait (satılık), "no" = kayıtlı (satılık değil)
-                avail_status = response_data.get('avail', 'unknown')
                 
+                # Debug için response'u logla
+                print(f"🔍 PORKBUN SUCCESS - Domain: {domain}")
+                print(f"🎯 Response Data: {response_data}")
+                
+                # Availability kontrolü
+                avail_status = response_data.get('avail', 'unknown')
+                price = response_data.get('price')
+                
+                print(f"🏷️ Availability: {avail_status}, Price: {price}")
+                
+                # Sonuç belirleme
                 if avail_status == 'yes':
-                    # Domain müsait (satın alınabilir)
                     is_available = True
                     status = 'Müsait'
                 elif avail_status == 'no':
-                    # Domain kayıtlı (satılık değil)
                     is_available = False
                     status = 'Kayıtlı'
+                elif price:  # Fiyat varsa müsait
+                    is_available = True
+                    status = 'Müsait (Fiyatlı)'
                 else:
-                    # Bilinmeyen durum
                     is_available = None
-                    status = 'Bilinmeyen'
+                    status = f'Bilinmeyen'
+                
+                print(f"✅ Final Result: available={is_available}, status={status}")
                 
                 return {
                     'domain': domain,
@@ -137,18 +180,48 @@ class DomainChecker:
                     'status': status,
                     'creation_date': '-',
                     'expiration_date': '-',
-                    'registrar': 'Porkbun API' if not is_available else '-',
+                    'registrar': 'Porkbun' if not is_available else '-',
                     'provider': 'Porkbun',
-                    'price': response_data.get('price', 'Bilinmiyor') if is_available else '-',
-                    'porkbun_response': response_data  # Debug için
+                    'price': price or '-',
+                    'renewal_price': response_data.get('additional', {}).get('renewal', {}).get('price', '-')
                 }
             else:
                 # API başarısız yanıt verdi
                 error_message = data.get('message', 'Bilinmeyen hata')
+                
+                # Rate limiting kontrolü
+                if 'checks within' in error_message and 'seconds used' in error_message:
+                    # Rate limit mesajından saniye bilgisini çıkar
+                    # Örnek: "1 out of 1 checks within 10 seconds used."
+                    import re
+                    seconds_match = re.search(r'within (\d+) seconds', error_message)
+                    wait_seconds = int(seconds_match.group(1)) if seconds_match else 12
+                    
+                    print(f"🚫 RATE LIMIT DETECTED for {domain} - Wait {wait_seconds} seconds")
+                    
+                    return {
+                        'domain': domain,
+                        'available': None,
+                        'status': 'Rate Limit - Bekleniyor',
+                        'creation_date': '-',
+                        'expiration_date': '-',
+                        'registrar': '-',
+                        'provider': 'Porkbun',
+                        'error': f'Rate limit - {wait_seconds} saniye bekleyin',
+                        'rate_limit': True,
+                        'wait_seconds': wait_seconds,
+                        'retry_after': wait_seconds,
+                        'full_response': data
+                    }
+                elif 'Invalid API key' in error_message:
+                    status = 'Geçersiz API Key'
+                else:
+                    status = f'Porkbun Hatası: {error_message}'
+                
                 return {
                     'domain': domain,
                     'available': None,
-                    'status': f'Porkbun Hatası: {error_message}',
+                    'status': status,
                     'creation_date': '-',
                     'expiration_date': '-',
                     'registrar': '-',

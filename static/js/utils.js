@@ -8,28 +8,28 @@ function copyToClipboard(text) {
             window.notificationManager.showNotification(`"${text}" panoya kopyalandı! 📋`, 'success');
         } else {
             // Fallback toast göster
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.textContent = 'Panoya kopyalandı!';
-            toast.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #28a745;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                z-index: 10000;
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = 'Panoya kopyalandı!';
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 10000;
                 font-family: Inter, sans-serif;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            `;
-            document.body.appendChild(toast);
-            
-            setTimeout(() => {
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
                 if (document.body.contains(toast)) {
-                    document.body.removeChild(toast);
+            document.body.removeChild(toast);
                 }
-            }, 2000);
+        }, 2000);
         }
     }).catch(() => {
         if (window.notificationManager) {

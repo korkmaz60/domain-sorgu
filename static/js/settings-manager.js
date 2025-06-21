@@ -191,4 +191,26 @@ class SettingsManager {
             toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
         }
     }
+
+    // Provider'ı programatik olarak değiştir
+    updateProvider(provider) {
+        console.log(`🔄 Updating provider to: ${provider}`);
+        
+        // Radio button'ı seç
+        const providerRadio = document.querySelector(`input[name="search-api"][value="${provider}"]`);
+        if (providerRadio) {
+            providerRadio.checked = true;
+        }
+        
+        // Config'i güncelle
+        window.domainSearch.searchConfig.provider = provider;
+        
+        // LocalStorage'a kaydet
+        localStorage.setItem('search_provider', provider);
+        
+        // UI'ı güncelle
+        this.handleApiProviderChange(provider);
+        
+        console.log(`✅ Provider updated to: ${provider}`);
+    }
 } 

@@ -36,6 +36,11 @@ class DomainSearchApp {
             return;
         }
 
+        // Yeni arama için rate limit sayacını sıfırla
+        if (window.globalRateLimitManager) {
+            window.globalRateLimitManager.resetRateLimitCount();
+        }
+
         // Eğer tam domain yazılmışsa (nokta içeriyorsa) tek domain kontrolü yap
         if (domainInput.includes('.')) {
             await this.handleSingleDomainCheck(domainInput);
@@ -54,45 +59,94 @@ class DomainSearchApp {
         this.showLoading(true);
 
         try {
-            const requestBody = { 
-                baseName: domainInput, 
-                extensions,
-                provider: this.searchConfig.provider
-            };
+            // Domain listesi oluştur
+            const domains = extensions.map(ext => `${domainInput}.${ext}`);
+            console.log(`🔍 Checking ${domains.length} domains one by one:`, domains);
 
-            if (this.searchConfig.provider === 'porkbun') {
-                requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-                requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
+            // Sonuçları tutacak arrays
+            const availableResults = [];
+            const takenResults = [];
+            const unknownResults = [];
+
+            // Her domain'i tek tek kontrol et
+            for (const domain of domains) {
+                try {
+                    const result = await this.checkSingleDomain(domain);
+                    
+                    if (result.error && !result.rate_limit) {
+                        // Hata varsa unknown olarak işaretle
+                        unknownResults.push({
+                            domain: domain,
+                            available: null,
+                            error: result.error
+                        });
+                    } else {
+                        // Başarılı sonuç
+                        const domainResult = {
+                            domain: domain,
+                            available: result.available,
+                            price: result.price || null
+                        };
+
+                        if (result.available === true) {
+                            availableResults.push(domainResult);
+                        } else if (result.available === false) {
+                            takenResults.push(domainResult);
+                        } else {
+                            unknownResults.push(domainResult);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`❌ Error checking ${domain}:`, error);
+                    
+                    // Rate limit aşıldığında işlemler iptal edildi
+                    if (error.message && error.message.includes('Rate limit exceeded')) {
+                        console.log('🛑 Operations cancelled due to rate limit - stopping loop');
+                        this.showError('variations-results', 'İşlemler rate limit nedeniyle iptal edildi. WHOIS\'e geçiş yapın.');
+                        this.showLoading(false); // Loading'i kapat
+                        return; // Fonksiyondan çık
+                    }
+                    
+                    unknownResults.push({
+                        domain: domain,
+                        available: null,
+                        error: 'Kontrol hatası'
+                    });
+                }
             }
 
-            const response = await fetch('/api/check-variations', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const data = await response.json();
+            // Sonuçları göster
+            this.displayCategorizedResults(domainInput, availableResults, takenResults, unknownResults, 'variations-results');
             
-            if (data.error) {
-                this.showError('variations-results', data.error);
+            // AI önerilerini al (eğer aktifse)
+            console.log('🔍 AI kontrol:', { enabled: this.aiConfig.enabled, hasApiKey: !!this.aiConfig.apiKey, hasModel: !!this.aiConfig.model });
+            if (this.aiConfig.enabled && this.aiConfig.apiKey && this.aiConfig.model) {
+                this.currentBaseName = domainInput;
+                this.usedSuggestions.clear(); // Yeni arama için önceki önerileri temizle
+                // AISuggestions class'ının currentBaseName'ini de set et
+                window.aiSuggestions.currentBaseName = domainInput;
+                window.aiSuggestions.usedSuggestions.clear();
+                window.aiSuggestions.getAISuggestions(domainInput);
             } else {
-                // Sonuçları kategorize et
-                const availableResults = data.results.filter(result => result.available === true);
-                const takenResults = data.results.filter(result => result.available === false);
-                const unknownResults = data.results.filter(result => result.available === null);
+                // AI kapalıysa veya ayar eksikse placeholder göster
+                const aiSuggestions = document.getElementById('ai-suggestions');
+                const aiResults = document.getElementById('ai-results');
                 
-                this.displayCategorizedResults(domainInput, availableResults, takenResults, unknownResults, 'variations-results');
-                
-                // AI önerilerini al (eğer aktifse)
-                if (this.aiConfig.enabled && this.aiConfig.apiKey && this.aiConfig.model) {
-                    this.currentBaseName = domainInput;
-                    this.usedSuggestions.clear(); // Yeni arama için önceki önerileri temizle
-                    window.aiSuggestions.getAISuggestions(domainInput);
+                if (this.aiConfig.enabled && (!this.aiConfig.apiKey || !this.aiConfig.model)) {
+                    aiSuggestions.classList.remove('hidden');
+                    aiResults.innerHTML = `
+                        <div class="bg-yellow-100 border border-yellow-200 rounded-xl p-6 text-center">
+                            <i class="fas fa-exclamation-triangle text-2xl text-yellow-600 mb-2"></i>
+                            <p class="text-yellow-700 font-medium">AI önerileri için API anahtarı ve model seçimi gerekli!</p>
+                            <button onclick="document.getElementById('settings-btn').click()" class="mt-3 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
+                                Ayarları Aç
+                            </button>
+                        </div>
+                    `;
                 }
             }
         } catch (error) {
+            console.error('❌ Variations check error:', error);
             this.showError('variations-results', 'Bağlantı hatası oluştu');
         } finally {
             this.showLoading(false);
@@ -103,27 +157,9 @@ class DomainSearchApp {
         this.showLoading(true);
         
         try {
-            const requestBody = { 
-                domain,
-                provider: this.searchConfig.provider
-            };
-
-            if (this.searchConfig.provider === 'porkbun') {
-                requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-                requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
-            }
-
-            const response = await fetch('/api/check-domain', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const result = await response.json();
+            const result = await this.checkSingleDomain(domain);
             
-            if (result.error) {
+            if (result.error && !result.rate_limit) {
                 this.showError('variations-results', result.error);
             } else {
                 this.displaySingleResult(result, 'variations-results');
@@ -135,11 +171,59 @@ class DomainSearchApp {
         }
     }
 
+    // Yardımcı fonksiyon - tek domain kontrolü
+    async checkSingleDomain(domain) {
+        // Porkbun API kullanılıyorsa global rate limit manager'ı kullan
+        if (this.searchConfig.provider === 'porkbun' && window.globalRateLimitManager) {
+            console.log(`🔄 Using rate limit manager for: ${domain}`);
+            return await window.globalRateLimitManager.makeRequest(domain, async () => {
+                return await this.makeDirectAPICall(domain);
+            });
+        } else {
+            // WHOIS için direkt çağrı
+            console.log(`🔄 Direct API call for: ${domain}`);
+            return await this.makeDirectAPICall(domain);
+        }
+    }
+
+    // Direkt API çağrısı (queue'dan veya WHOIS için)
+    async makeDirectAPICall(domain) {
+        const requestBody = { 
+            domain,
+            provider: this.searchConfig.provider
+        };
+
+        if (this.searchConfig.provider === 'porkbun') {
+            requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
+            requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
+        }
+
+        console.log(`📡 Making API call for: ${domain} via ${this.searchConfig.provider}`);
+
+        const response = await fetch('/api/check-domain', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const result = await response.json();
+        console.log(`📡 API response for ${domain}: ${result.status}`);
+        
+        return result;
+    }
+
     async handleBulkCheck(e) {
         e.preventDefault();
         
         const domainsText = document.getElementById('bulk-domains').value.trim();
         if (!domainsText) return;
+
+        // Yeni arama için rate limit sayacını sıfırla
+        if (window.globalRateLimitManager) {
+            window.globalRateLimitManager.resetRateLimitCount();
+        }
 
         const domains = domainsText.split('\n')
             .map(domain => domain.trim())
@@ -153,32 +237,43 @@ class DomainSearchApp {
         this.showLoading(true);
 
         try {
-            const requestBody = { 
-                domains,
-                provider: this.searchConfig.provider
-            };
+            console.log(`🔍 Bulk checking ${domains.length} domains one by one:`, domains);
+            const results = [];
 
-            if (this.searchConfig.provider === 'porkbun') {
-                requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-                requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
+            // Her domain'i tek tek kontrol et
+            for (const domain of domains) {
+                try {
+                    const result = await this.checkSingleDomain(domain);
+                    
+                    results.push({
+                        domain: domain,
+                        available: result.available,
+                        price: result.price || null,
+                        error: result.error || null
+                    });
+                } catch (error) {
+                    console.error(`❌ Error checking ${domain}:`, error);
+                    
+                    // Rate limit aşıldığında işlemler iptal edildi
+                    if (error.message && error.message.includes('Rate limit exceeded')) {
+                        console.log('🛑 Bulk operations cancelled due to rate limit - stopping loop');
+                        this.showError('bulk-results', 'İşlemler rate limit nedeniyle iptal edildi. WHOIS\'e geçiş yapın.');
+                        this.showLoading(false); // Loading'i kapat
+                        return; // Fonksiyondan çık
+                    }
+                    
+                    results.push({
+                        domain: domain,
+                        available: null,
+                        error: 'Kontrol hatası'
+                    });
+                }
             }
 
-            const response = await fetch('/api/check-multiple', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const data = await response.json();
-            
-            if (data.error) {
-                this.showError('bulk-results', data.error);
-            } else {
-                this.displayMultipleResults(data.results, 'bulk-results');
-            }
+            // Sonuçları göster
+            this.displayMultipleResults(results, 'bulk-results');
         } catch (error) {
+            console.error('❌ Bulk check error:', error);
             this.showError('bulk-results', 'Bağlantı hatası oluştu');
         } finally {
             this.showLoading(false);

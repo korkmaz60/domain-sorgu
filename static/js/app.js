@@ -15,6 +15,14 @@ class App {
         window.settingsManager = new SettingsManager();
         window.aiToggle = new AIToggle();
         window.notificationManager = new NotificationManager();
+        
+        // Global Rate Limit Manager zaten global-rate-limit-manager.js'te initialize edildi
+        // Sadece doğru çalıştığını kontrol edelim
+        if (window.globalRateLimitManager) {
+            console.log('✅ Global Rate Limit Manager ready');
+        } else {
+            console.error('❌ Global Rate Limit Manager not found!');
+        }
 
         // Event listener'ları kur
         this.setupEventListeners();
