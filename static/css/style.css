@@ -1,0 +1,272 @@
+/* Domain Sorgulama - Tailwind CSS Destekli Stil Dosyası */
+
+/* Özel animasyonlar ve geçişler */
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Gradient arka planları */
+.gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-secondary {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+/* Cam efekti */
+.glass-effect {
+    backdrop-filter: blur(16px);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Card hover efekti */
+.card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Loading spinner */
+.loading-spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* Özel checkbox stilleri */
+.extension-label input[type="checkbox"]:checked {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+}
+
+.extension-label:has(input[type="checkbox"]:checked) {
+    border-color: #3b82f6;
+    background-color: #eff6ff;
+}
+
+/* AI Toggle Switch Stilleri */
+#ai-toggle-btn {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+}
+
+#ai-toggle-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1);
+}
+
+#ai-toggle-switch {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* AI Toggle animasyonları */
+.ai-toggle-active #ai-toggle-btn {
+    background-color: #9333ea;
+}
+
+.ai-toggle-active #ai-toggle-switch {
+    transform: translateX(1.25rem);
+}
+
+/* AI Quick Settings animasyonu */
+#ai-quick-settings {
+    transition: all 0.3s ease-in-out;
+    overflow: hidden;
+}
+
+#ai-quick-settings.hidden {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+#ai-quick-settings:not(.hidden) {
+    max-height: 200px;
+    opacity: 1;
+}
+
+/* AI sonuçları için özel stiller */
+.ai-suggestion-group {
+    @apply bg-white rounded-xl shadow-md p-6 mb-4;
+}
+
+.ai-suggestion-title h4 {
+    @apply text-lg font-bold text-purple-700 mb-4 flex items-center;
+}
+
+.ai-suggestion-title i {
+    @apply mr-2 text-yellow-500;
+}
+
+.ai-suggestion-domains {
+    @apply space-y-3;
+}
+
+.ai-domain-result {
+    @apply flex items-center justify-between p-4 bg-gray-50 rounded-lg border;
+}
+
+.ai-domain-name {
+    @apply font-medium text-gray-800;
+}
+
+.ai-domain-actions {
+    @apply flex items-center space-x-2;
+}
+
+.ai-status-badge {
+    @apply px-3 py-1 rounded-full text-xs font-medium;
+}
+
+.ai-status-badge.available {
+    @apply bg-green-100 text-green-700;
+}
+
+.ai-status-badge.taken {
+    @apply bg-red-100 text-red-700;
+}
+
+.ai-status-badge.unknown {
+    @apply bg-yellow-100 text-yellow-700;
+}
+
+/* Wishlist özel stilleri */
+.wishlist-item {
+    @apply bg-white rounded-xl shadow-md p-6 border-l-4;
+}
+
+.wishlist-item.status-available {
+    @apply border-l-green-500;
+}
+
+.wishlist-item.status-taken {
+    @apply border-l-red-500;
+}
+
+.wishlist-item.status-unknown {
+    @apply border-l-yellow-500;
+}
+
+.wishlist-item.status-unchecked {
+    @apply border-l-gray-300;
+}
+
+/* Responsive tasarım iyileştirmeleri */
+@media (max-width: 768px) {
+    .gradient-primary .container {
+        @apply px-4 py-8;
+    }
+    
+    .gradient-primary h1 {
+        @apply text-3xl;
+    }
+    
+    .gradient-primary p {
+        @apply text-lg;
+    }
+    
+    .grid.grid-cols-3 {
+        @apply grid-cols-1;
+    }
+    
+    .grid.md\\:grid-cols-5 {
+        @apply grid-cols-2;
+    }
+    
+    .flex.items-center.justify-center.space-x-6 {
+        @apply flex-col space-x-0 space-y-4;
+    }
+}
+
+/* Smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Focus stilleri */
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    ring-width: 4px;
+    ring-color: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+}
+
+/* Button hover efektleri */
+button:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* Notification toast için ek stiller */
+.notification {
+    max-width: 400px;
+    word-wrap: break-word;
+}
+
+/* Loading overlay */
+#loading {
+    backdrop-filter: blur(4px);
+}
+
+/* Settings modal animasyonu */
+#settings-modal .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+}
+
+/* Scrollbar özelleştirme */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Print stilleri */
+@media print {
+    .fixed, .sticky, #settings-btn, .notification {
+        display: none !important;
+    }
+    
+    body {
+        background: white !important;
+    }
+    
+    .bg-gradient-to-br {
+        background: white !important;
+    }
+} 
