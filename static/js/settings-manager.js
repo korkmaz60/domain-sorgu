@@ -30,6 +30,9 @@ class SettingsManager {
             radio.addEventListener('change', (e) => this.handleApiProviderChange(e.target.value));
         });
         
+        // İlk kez yüklendiğinde provider ayarını göster
+        this.handleApiProviderChange(window.domainSearch.searchConfig.provider);
+        
         // Test connection butonunu dinle
         const testConnectionBtn = document.getElementById('test-connection');
         if (testConnectionBtn) {
@@ -40,6 +43,17 @@ class SettingsManager {
         const toggleKeyBtn = document.getElementById('toggle-key-visibility');
         if (toggleKeyBtn) {
             toggleKeyBtn.addEventListener('click', () => this.toggleAPIKeyVisibility());
+        }
+        
+        // Porkbun API key visibility toggle
+        const togglePorkbunKeyBtn = document.getElementById('toggle-porkbun-key-visibility');
+        if (togglePorkbunKeyBtn) {
+            togglePorkbunKeyBtn.addEventListener('click', () => this.togglePorkbunKeyVisibility());
+        }
+        
+        const togglePorkbunSecretBtn = document.getElementById('toggle-porkbun-secret-visibility');
+        if (togglePorkbunSecretBtn) {
+            togglePorkbunSecretBtn.addEventListener('click', () => this.togglePorkbunSecretVisibility());
         }
     }
 
@@ -145,6 +159,32 @@ class SettingsManager {
             porkbunSettings.classList.remove('hidden');
         } else {
             porkbunSettings.classList.add('hidden');
+        }
+    }
+    
+    togglePorkbunKeyVisibility() {
+        const porkbunKeyInput = document.getElementById('porkbun-api-key');
+        const toggleBtn = document.getElementById('toggle-porkbun-key-visibility');
+        
+        if (porkbunKeyInput.type === 'password') {
+            porkbunKeyInput.type = 'text';
+            toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+        } else {
+            porkbunKeyInput.type = 'password';
+            toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+        }
+    }
+    
+    togglePorkbunSecretVisibility() {
+        const porkbunSecretInput = document.getElementById('porkbun-secret-key');
+        const toggleBtn = document.getElementById('toggle-porkbun-secret-visibility');
+        
+        if (porkbunSecretInput.type === 'password') {
+            porkbunSecretInput.type = 'text';
+            toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+        } else {
+            porkbunSecretInput.type = 'password';
+            toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
         }
     }
 } 

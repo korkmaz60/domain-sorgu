@@ -44,7 +44,8 @@ class UIManager {
         
         // Hepsini seç/kaldır butonları
         const selectAllBtn = document.getElementById('select-all-extensions');
-        const clearAllBtn = document.getElementById('clear-all-extensions');
+        const clearAllBtn = document.getElementById('unselect-all-extensions');
+        const selectPopularBtn = document.getElementById('select-popular-extensions');
         
         if (selectAllBtn) {
             selectAllBtn.addEventListener('click', () => this.selectAllExtensions(true));
@@ -52,6 +53,10 @@ class UIManager {
         
         if (clearAllBtn) {
             clearAllBtn.addEventListener('click', () => this.selectAllExtensions(false));
+        }
+        
+        if (selectPopularBtn) {
+            selectPopularBtn.addEventListener('click', () => this.selectPopularExtensions());
         }
     }
 
@@ -73,6 +78,25 @@ class UIManager {
         this.updateExtensionSelection();
     }
 
+    selectPopularExtensions() {
+        const popularExtensions = ['com', 'net', 'org', 'io'];
+        
+        // Önce tümünü temizle
+        document.querySelectorAll('.extension-label input').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        // Popüler olanları seç
+        popularExtensions.forEach(ext => {
+            const checkbox = document.querySelector(`.extension-label input[value="${ext}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+        
+        this.updateExtensionSelection();
+    }
+
     setupSettingsModal() {
         const settingsBtn = document.getElementById('settings-btn');
         const settingsModal = document.getElementById('settings-modal');
@@ -84,6 +108,8 @@ class UIManager {
                 settingsModal.classList.remove('hidden');
                 settingsModal.classList.add('flex');
                 window.settingsManager.loadAISettings();
+                // İlk tab'ı aktif yap
+                this.switchSettingsTab('ai-settings');
             });
         }
         
@@ -125,8 +151,8 @@ class UIManager {
     switchSettingsTab(tabName) {
         // Tüm settings tab butonlarını pasif yap
         document.querySelectorAll('.settings-tab-btn').forEach(btn => {
-            btn.classList.remove('bg-primary-500', 'text-white');
-            btn.classList.add('text-gray-600', 'hover:text-primary-600', 'hover:bg-primary-50');
+            btn.classList.remove('text-primary-600', 'bg-primary-50', 'border-primary-500');
+            btn.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300', 'border-transparent');
         });
         
         // Tüm settings tab içeriklerini gizle
@@ -135,12 +161,12 @@ class UIManager {
         });
         
         // Seçilen tab'ı aktif yap
-        const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
-        const activeContent = document.getElementById(`${tabName}-settings`);
+        const activeBtn = document.querySelector(`.settings-tab-btn[data-tab="${tabName}"]`);
+        const activeContent = document.getElementById(`${tabName}-tab`);
         
         if (activeBtn && activeContent) {
-            activeBtn.classList.remove('text-gray-600', 'hover:text-primary-600', 'hover:bg-primary-50');
-            activeBtn.classList.add('bg-primary-500', 'text-white');
+            activeBtn.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300', 'border-transparent');
+            activeBtn.classList.add('text-primary-600', 'bg-primary-50', 'border-primary-500');
             activeContent.classList.remove('hidden');
         }
     }
