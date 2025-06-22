@@ -2,661 +2,545 @@
 
 class WishlistApp {
     constructor() {
+        this.wishlist = [];
         this.searchConfig = {
-            provider: localStorage.getItem('search_provider') || 'whois',
-            porkbunApiKey: localStorage.getItem('porkbun_api_key') || '',
-            porkbunSecretKey: localStorage.getItem('porkbun_secret_key') || ''
+            provider: localStorage.getItem('domain_search_provider') || 'whois',
+            godaddyApiKey: localStorage.getItem('godaddy_api_key') || '',
+            godaddySecretKey: localStorage.getItem('godaddy_secret_key') || ''
         };
-        this.currentFilter = 'all';
-        this.currentSort = 'date-desc';
-        this.stats = {
-            total: 0,
-            available: 0,
-            taken: 0,
-            unknown: 0,
-            unchecked: 0
-        };
-        this.init();
-    }
-
-    init() {
-        this.setupEventListeners();
+        
         this.loadWishlist();
-        this.updateStats();
-    }
-
-    setupEventListeners() {
-        // Form submission
-        document.getElementById('wishlist-add-form').addEventListener('submit', (e) => this.handleAddToWishlist(e));
+        this.setupEventListeners();
+        this.renderWishlist();
         
-        // Action buttons
-        document.getElementById('check-all-wishlist').addEventListener('click', () => this.checkAllWishlist());
-        document.getElementById('refresh-all-wishlist').addEventListener('click', () => this.refreshAllWishlist());
-        document.getElementById('clear-wishlist').addEventListener('click', () => this.clearWishlist());
-        document.getElementById('export-wishlist').addEventListener('click', () => this.exportWishlist());
-        
-        // Filter and sort
-        document.getElementById('filter-wishlist').addEventListener('click', () => this.toggleFilterPanel());
-        document.getElementById('sort-wishlist').addEventListener('click', () => this.toggleFilterPanel());
-        document.getElementById('status-filter').addEventListener('change', (e) => this.applyFilter(e.target.value));
-        document.getElementById('sort-option').addEventListener('change', (e) => this.applySorting(e.target.value));
-    }
-
-    showLoading(show = true) {
-        const loading = document.getElementById('loading');
-        if (show) {
-            loading.classList.remove('hidden');
-            loading.classList.add('flex');
-        } else {
-            loading.classList.add('hidden');
-            loading.classList.remove('flex');
-        }
-    }
-
-    showNotification(message, type = 'info') {
-        // Notification container oluştur (yoksa)
-        let container = document.getElementById('notification-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'notification-container';
-            container.className = 'fixed top-4 right-4 z-50 space-y-2';
-            document.body.appendChild(container);
-        }
-
-        // Notification element
-        const notification = document.createElement('div');
-        const bgColor = {
-            'success': 'bg-green-500',
-            'error': 'bg-red-500',
-            'warning': 'bg-yellow-500',
-            'info': 'bg-blue-500'
-        }[type] || 'bg-blue-500';
-
-        const icon = {
-            'success': 'fa-check-circle',
-            'error': 'fa-exclamation-circle',
-            'warning': 'fa-exclamation-triangle',
-            'info': 'fa-info-circle'
-        }[type] || 'fa-info-circle';
-
-        notification.className = `${bgColor} text-white px-6 py-4 rounded-xl shadow-lg transform translate-x-full transition-transform duration-300 flex items-center space-x-3 max-w-sm`;
-        notification.innerHTML = `
-            <i class="fas ${icon}"></i>
-            <span class="font-medium">${message}</span>
-            <button class="ml-auto text-white/80 hover:text-white" onclick="this.parentElement.remove()">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-
-        container.appendChild(notification);
-
-        // Animasyon
-        setTimeout(() => {
-            notification.classList.remove('translate-x-full');
-        }, 100);
-
-        // Otomatik kaldırma
-        setTimeout(() => {
-            notification.classList.add('translate-x-full');
-            setTimeout(() => {
-                if (notification.parentElement) {
-                    notification.remove();
-                }
-            }, 300);
-        }, 5000);
-    }
-
-    getWishlist() {
-        return JSON.parse(localStorage.getItem('domain_wishlist') || '[]');
-    }
-
-    saveWishlist(wishlist) {
-        localStorage.setItem('domain_wishlist', JSON.stringify(wishlist));
-    }
-
-    isInWishlist(domain) {
-        const wishlist = this.getWishlist();
-        return wishlist.some(item => item.domain.toLowerCase() === domain.toLowerCase());
-    }
-
-    addToWishlist(domain) {
-        if (this.isInWishlist(domain)) {
-            this.showNotification('Bu domain zaten listenizde mevcut', 'warning');
-            return false;
-        }
-
-        const wishlist = this.getWishlist();
-        const newItem = {
-            domain: domain.toLowerCase(),
-            addedDate: new Date().toISOString(),
-            status: null,
-            lastChecked: null,
-            result: null
-        };
-
-        wishlist.push(newItem);
-        this.saveWishlist(wishlist);
-        this.showNotification('Domain istek listesine eklendi', 'success');
-        return true;
-    }
-
-    removeFromWishlist(domain) {
-        const wishlist = this.getWishlist();
-        const filteredWishlist = wishlist.filter(item => item.domain.toLowerCase() !== domain.toLowerCase());
-        this.saveWishlist(filteredWishlist);
-        this.showNotification('Domain istek listesinden kaldırıldı', 'info');
-    }
-
-    async handleAddToWishlist(e) {
-        e.preventDefault();
-        const domainInput = document.getElementById('wishlist-domain');
-        const domain = domainInput.value.trim().toLowerCase();
-
-        if (!domain) {
-            this.showNotification('Lütfen domain adı girin', 'error');
-            return;
-        }
-
-        // Domain formatı kontrolü
-        if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) {
-            this.showNotification('Geçerli bir domain formatı girin (örn: example.com)', 'error');
-            return;
-        }
-
-        if (this.addToWishlist(domain)) {
-            domainInput.value = '';
-            this.loadWishlist();
-            this.updateStats();
-        }
+        console.log('💝 Wishlist App başlatıldı');
     }
 
     loadWishlist() {
-        const wishlist = this.getWishlist();
-        const emptyDiv = document.getElementById('wishlist-empty');
-        const itemsDiv = document.getElementById('wishlist-items');
-
-        if (wishlist.length === 0) {
-            emptyDiv.classList.remove('hidden');
-            itemsDiv.classList.add('hidden');
-        } else {
-            emptyDiv.classList.add('hidden');
-            itemsDiv.classList.remove('hidden');
-            this.renderWishlistItems(wishlist);
+        try {
+            const stored = localStorage.getItem('domain_wishlist');
+            this.wishlist = stored ? JSON.parse(stored) : [];
+            console.log('📂 Wishlist yüklendi:', this.wishlist.length);
+        } catch (error) {
+            console.error('❌ Wishlist yükleme hatası:', error);
+            this.wishlist = [];
         }
     }
 
-    renderWishlistItems(wishlist) {
-        const container = document.getElementById('wishlist-items');
-        
-        // Filtreleme ve sıralama uygula
-        let filteredWishlist = this.filterWishlist(wishlist, this.currentFilter);
-        filteredWishlist = this.sortWishlist(filteredWishlist, this.currentSort);
+    saveWishlist() {
+        try {
+            localStorage.setItem('domain_wishlist', JSON.stringify(this.wishlist));
+            console.log('💾 Wishlist kaydedildi');
+        } catch (error) {
+            console.error('❌ Wishlist kaydetme hatası:', error);
+        }
+    }
 
-        if (filteredWishlist.length === 0 && this.currentFilter !== 'all') {
-            container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
-                    <i class="fas fa-filter text-4xl text-gray-300 mb-4"></i>
-                    <h3 class="text-xl font-semibold text-gray-600 mb-2">Filtre sonucu bulunamadı</h3>
-                    <p class="text-gray-500">Seçilen kriterlere uygun domain bulunamadı.</p>
-                    <button onclick="document.getElementById('status-filter').value='all'; wishlistApp.applyFilter('all')" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-                        Tüm Domainleri Göster
-                    </button>
-                </div>
-            `;
+    setupEventListeners() {
+        // Add domain form
+        const addForm = document.getElementById('add-domain-form');
+        if (addForm) {
+            addForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addDomainFromForm();
+            });
+        }
+
+        // Import/Export butonları
+        const importBtn = document.getElementById('import-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const importInput = document.getElementById('import-input');
+
+        if (importBtn) {
+            importBtn.addEventListener('click', () => importInput?.click());
+        }
+
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportWishlist());
+        }
+
+        if (importInput) {
+            importInput.addEventListener('change', (e) => this.importWishlist(e));
+        }
+
+        // Check all buton
+        const checkAllBtn = document.getElementById('check-all-btn');
+        if (checkAllBtn) {
+            checkAllBtn.addEventListener('click', () => this.checkAllDomains());
+        }
+
+        // Clear all buton
+        const clearAllBtn = document.getElementById('clear-all-btn');
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', () => this.clearAllDomains());
+        }
+    }
+
+    addDomainFromForm() {
+        const input = document.getElementById('domain-input');
+        const domain = input?.value.trim();
+
+        if (!domain) {
+            this.showNotification('Domain adı giriniz!', 'error');
             return;
         }
 
-        container.innerHTML = filteredWishlist.map(item => this.createWishlistItemHTML(item)).join('');
+        this.addDomain(domain);
+        input.value = '';
     }
 
-    createWishlistItemHTML(item) {
-        const statusBadge = this.getStatusBadge(item.status);
-        const actionButtons = this.getActionButtons(item);
-        const domainDetails = this.getDomainDetails(item);
+    addDomain(domain) {
+        // Domain formatını düzenle
+        domain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
 
-        return `
-            <div class="wishlist-item bg-white rounded-2xl shadow-lg p-6 border-l-4 ${this.getBorderColor(item.status)} card-hover" data-domain="${item.domain}">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center space-x-4">
-                        <div class="flex items-center justify-center w-12 h-12 ${this.getIconBgColor(item.status)} rounded-xl">
-                            <i class="fas ${this.getStatusIcon(item.status)} text-xl ${this.getIconColor(item.status)}"></i>
-                        </div>
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 flex items-center space-x-2">
-                                <span>${item.domain}</span>
-                                ${statusBadge}
-                            </h3>
-                            <p class="text-gray-600 text-sm">
-                                Eklenme: ${this.formatDate(item.addedDate)}
-                                ${item.lastChecked ? `• Son kontrol: ${this.formatDate(item.lastChecked)}` : ''}
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        ${actionButtons}
-                    </div>
-                </div>
-                
-                ${domainDetails}
-            </div>
-        `;
-    }
-
-    getStatusBadge(status) {
-        const badges = {
-            true: '<span class="status-badge px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">Müsait</span>',
-            false: '<span class="status-badge px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">Kayıtlı</span>',
-            null: '<span class="status-badge px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-semibold">Kontrol Edilmedi</span>',
-            'unknown': '<span class="status-badge px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">Bilinmeyen</span>'
-        };
-        return badges[status] || badges[null];
-    }
-
-    getActionButtons(item) {
-        const checkButton = `
-            <button onclick="wishlistApp.checkSingleDomain('${item.domain}')" 
-                    class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors flex items-center space-x-2 text-sm font-medium">
-                <i class="fas fa-search"></i>
-                <span>Kontrol Et</span>
-            </button>
-        `;
-
-        const removeButton = `
-            <button onclick="wishlistApp.removeDomain('${item.domain}')" 
-                    class="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors flex items-center space-x-2 text-sm font-medium">
-                <i class="fas fa-trash"></i>
-                <span>Kaldır</span>
-            </button>
-        `;
-
-        return checkButton + removeButton;
-    }
-
-    getDomainDetails(item) {
-        if (!item.result) return '';
-
-        const result = item.result;
-        let details = '';
-
-        if (result.registrar) {
-            details += `<p><strong>Registrar:</strong> ${result.registrar}</p>`;
-        }
-        if (result.creation_date) {
-            details += `<p><strong>Kayıt Tarihi:</strong> ${this.formatDate(result.creation_date)}</p>`;
-        }
-        if (result.expiration_date) {
-            details += `<p><strong>Son Geçerlilik:</strong> ${this.formatDate(result.expiration_date)}</p>`;
+        if (this.isDomainInWishlist(domain)) {
+            this.showNotification('Bu domain zaten listede!', 'warning');
+            return;
         }
 
-        if (details) {
-            return `
-                <div class="mt-4 pt-4 border-t border-gray-200">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
-                        ${details}
-                    </div>
-                </div>
-            `;
+        const newItem = {
+            domain: domain,
+            addedAt: new Date().toISOString(),
+            lastChecked: null,
+            status: 'Kontrol Edilmedi',
+            available: null
+        };
+
+        this.wishlist.push(newItem);
+        this.saveWishlist();
+        this.renderWishlist();
+        this.showNotification(`${domain} listenize eklendi!`, 'success');
+    }
+
+    removeDomain(domain) {
+        const index = this.wishlist.findIndex(item => item.domain === domain);
+        if (index !== -1) {
+            this.wishlist.splice(index, 1);
+            this.saveWishlist();
+            this.renderWishlist();
+            this.showNotification(`${domain} listeden çıkarıldı!`, 'info');
         }
-
-        return '';
     }
 
-    getBorderColor(status) {
-        const colors = {
-            true: 'border-green-500',
-            false: 'border-red-500',
-            null: 'border-gray-300',
-            'unknown': 'border-yellow-500'
-        };
-        return colors[status] || colors[null];
-    }
-
-    getIconBgColor(status) {
-        const colors = {
-            true: 'bg-green-100',
-            false: 'bg-red-100',
-            null: 'bg-gray-100',
-            'unknown': 'bg-yellow-100'
-        };
-        return colors[status] || colors[null];
-    }
-
-    getIconColor(status) {
-        const colors = {
-            true: 'text-green-600',
-            false: 'text-red-600',
-            null: 'text-gray-600',
-            'unknown': 'text-yellow-600'
-        };
-        return colors[status] || colors[null];
-    }
-
-    getStatusIcon(status) {
-        const icons = {
-            true: 'fa-check-circle',
-            false: 'fa-times-circle',
-            null: 'fa-question-circle',
-            'unknown': 'fa-exclamation-circle'
-        };
-        return icons[status] || icons[null];
+    isDomainInWishlist(domain) {
+        return this.wishlist.some(item => item.domain === domain);
     }
 
     async checkSingleDomain(domain) {
-        this.showLoading(true);
-        
         try {
             const requestBody = { 
-                domain,
+                domain: domain,
                 provider: this.searchConfig.provider
             };
 
-            if (this.searchConfig.provider === 'porkbun') {
-                requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-                requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
+            if (this.searchConfig.provider === 'godaddy') {
+                requestBody.godaddy_api_key = this.searchConfig.godaddyApiKey;
+                requestBody.godaddy_secret_key = this.searchConfig.godaddySecretKey;
             }
 
             const response = await fetch('/api/check-domain', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(requestBody)
             });
 
-            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
             
-            if (data.error) {
-                this.showNotification(`Hata: ${data.error}`, 'error');
-            } else {
-                this.updateWishlistItem(domain, data.available, data);
-                this.loadWishlist();
-                this.updateStats();
-                
-                const statusText = data.available === true ? 'müsait' : 
-                                 data.available === false ? 'kayıtlı' : 'bilinmeyen';
-                this.showNotification(`${domain} durumu: ${statusText}`, 'info');
+            // Wishlist item'ını güncelle
+            const item = this.wishlist.find(item => item.domain === domain);
+            if (item) {
+                item.lastChecked = new Date().toISOString();
+                item.status = result.status;
+                item.available = result.available;
+                item.error = result.error;
             }
+
+            return result;
+
         } catch (error) {
-            this.showNotification('Bağlantı hatası oluştu', 'error');
+            console.error(`❌ ${domain} kontrol hatası:`, error);
+            
+            const item = this.wishlist.find(item => item.domain === domain);
+            if (item) {
+                item.lastChecked = new Date().toISOString();
+                item.status = 'Kontrol Hatası';
+                item.available = null;
+                item.error = error.message;
+            }
+
+            return {
+                domain: domain,
+                available: null,
+                status: 'Kontrol Hatası',
+                error: error.message
+            };
+        }
+    }
+
+    async checkAllDomains() {
+        if (this.wishlist.length === 0) {
+            this.showNotification('Liste boş!', 'warning');
+            return;
+        }
+
+        const checkBtn = document.getElementById('check-all-btn');
+        const originalText = checkBtn?.innerHTML;
+        
+        if (checkBtn) {
+            checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Kontrol Ediliyor...';
+            checkBtn.disabled = true;
+        }
+
+        this.showNotification('Tüm domainler kontrol ediliyor...', 'info');
+
+        try {
+            const promises = this.wishlist.map(item => this.checkSingleDomain(item.domain));
+            await Promise.all(promises);
+            
+            this.saveWishlist();
+            this.renderWishlist();
+            this.showNotification('Tüm domainler kontrol edildi!', 'success');
+
+        } catch (error) {
+            console.error('❌ Toplu kontrol hatası:', error);
+            this.showNotification('Toplu kontrol sırasında hata oluştu!', 'error');
         } finally {
-            this.showLoading(false);
+            if (checkBtn) {
+                checkBtn.innerHTML = originalText;
+                checkBtn.disabled = false;
+            }
         }
     }
 
-    updateWishlistItem(domain, status, result = null) {
-        const wishlist = this.getWishlist();
-        const itemIndex = wishlist.findIndex(item => item.domain.toLowerCase() === domain.toLowerCase());
-        
-        if (itemIndex !== -1) {
-            wishlist[itemIndex].status = status;
-            wishlist[itemIndex].lastChecked = new Date().toISOString();
-            wishlist[itemIndex].result = result;
-            this.saveWishlist(wishlist);
-        }
-    }
-
-    async checkAllWishlist() {
-        const wishlist = this.getWishlist();
-        if (wishlist.length === 0) {
-            this.showNotification('İstek listeniz boş', 'warning');
-            return;
-        }
-
-        this.showLoading(true);
-        let checkedCount = 0;
-        let totalCount = wishlist.length;
-
-        this.showNotification(`${totalCount} domain kontrol ediliyor...`, 'info');
-
-        for (const item of wishlist) {
+    async checkDomainsByProvider(domains, provider) {
             try {
                 const requestBody = { 
-                    domain: item.domain,
-                    provider: this.searchConfig.provider
-                };
+                domains: domains,
+                provider: provider
+            };
 
-                if (this.searchConfig.provider === 'porkbun') {
-                    requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-                    requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
-                }
+            if (provider === 'godaddy') {
+                requestBody.godaddy_api_key = this.searchConfig.godaddyApiKey;
+                requestBody.godaddy_secret_key = this.searchConfig.godaddySecretKey;
+            }
 
-                const response = await fetch('/api/check-domain', {
+            const response = await fetch('/api/check-multiple', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(requestBody)
                 });
 
-                const data = await response.json();
-                
-                if (!data.error) {
-                    this.updateWishlistItem(item.domain, data.available, data);
-                }
-                
-                checkedCount++;
-                
-                // Progress update
-                if (checkedCount % 5 === 0 || checkedCount === totalCount) {
-                    this.showNotification(`${checkedCount}/${totalCount} domain kontrol edildi`, 'info');
-                }
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
 
-                // Rate limiting - kısa bekleme
-                await new Promise(resolve => setTimeout(resolve, 500));
+            return await response.json();
 
             } catch (error) {
-                console.error(`Error checking ${item.domain}:`, error);
-            }
+            console.error(`❌ ${provider} toplu kontrol hatası:`, error);
+            throw error;
         }
-
-        this.showLoading(false);
-        this.loadWishlist();
-        this.updateStats();
-        this.showNotification(`Tüm domainler kontrol edildi (${checkedCount}/${totalCount})`, 'success');
     }
 
-    async refreshAllWishlist() {
-        const wishlist = this.getWishlist();
-        const checkedItems = wishlist.filter(item => item.status !== null);
-        
-        if (checkedItems.length === 0) {
-            this.showNotification('Yenilenecek kontrol edilmiş domain bulunamadı', 'warning');
-            return;
-        }
-
-        this.showLoading(true);
-        let refreshedCount = 0;
-
-        for (const item of checkedItems) {
+    async checkVariationsByProvider(baseName, extensions, provider) {
             try {
                 const requestBody = { 
-                    domain: item.domain,
-                    provider: this.searchConfig.provider
-                };
+                base_name: baseName,
+                extensions: extensions,
+                provider: provider
+            };
 
-                if (this.searchConfig.provider === 'porkbun') {
-                    requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-                    requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
-                }
+            if (provider === 'godaddy') {
+                requestBody.godaddy_api_key = this.searchConfig.godaddyApiKey;
+                requestBody.godaddy_secret_key = this.searchConfig.godaddySecretKey;
+            }
 
-                const response = await fetch('/api/check-domain', {
+            const response = await fetch('/api/check-variations', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(requestBody)
                 });
 
-                const data = await response.json();
-                
-                if (!data.error) {
-                    this.updateWishlistItem(item.domain, data.available, data);
-                    refreshedCount++;
-                }
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
 
-                await new Promise(resolve => setTimeout(resolve, 500));
+            return await response.json();
 
             } catch (error) {
-                console.error(`Error refreshing ${item.domain}:`, error);
-            }
-        }
-
-        this.showLoading(false);
-        this.loadWishlist();
-        this.updateStats();
-        this.showNotification(`${refreshedCount} domain yenilendi`, 'success');
-    }
-
-    removeDomain(domain) {
-        if (confirm(`${domain} adresini istek listesinden kaldırmak istediğinizden emin misiniz?`)) {
-            this.removeFromWishlist(domain);
-            this.loadWishlist();
-            this.updateStats();
+            console.error(`❌ ${provider} varyasyon kontrol hatası:`, error);
+            throw error;
         }
     }
 
-    clearWishlist() {
-        if (confirm('Tüm istek listesini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
-            localStorage.removeItem('domain_wishlist');
-            this.loadWishlist();
-            this.updateStats();
-            this.showNotification('İstek listesi temizlendi', 'info');
+    clearAllDomains() {
+        if (this.wishlist.length === 0) {
+            this.showNotification('Liste zaten boş!', 'warning');
+            return;
+        }
+
+        if (confirm('Tüm domainleri silmek istediğinizden emin misiniz?')) {
+            this.wishlist = [];
+            this.saveWishlist();
+            this.renderWishlist();
+            this.showNotification('Tüm domainler silindi!', 'info');
         }
     }
 
     exportWishlist() {
-        const wishlist = this.getWishlist();
-        if (wishlist.length === 0) {
-            this.showNotification('İstek listeniz boş', 'warning');
+        if (this.wishlist.length === 0) {
+            this.showNotification('Liste boş!', 'warning');
             return;
         }
 
-        const csvContent = this.generateCSV(wishlist);
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        
-        link.setAttribute('href', url);
-        link.setAttribute('download', `domain-wishlist-${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        this.showNotification('İstek listesi dışa aktarıldı', 'success');
-    }
-
-    generateCSV(wishlist) {
-        const headers = ['Domain', 'Durum', 'Eklenme Tarihi', 'Son Kontrol', 'Registrar', 'Kayıt Tarihi', 'Son Geçerlilik'];
-        const rows = wishlist.map(item => [
-            item.domain,
-            item.status === true ? 'Müsait' : item.status === false ? 'Kayıtlı' : item.status === 'unknown' ? 'Bilinmeyen' : 'Kontrol Edilmedi',
-            this.formatDate(item.addedDate),
-            item.lastChecked ? this.formatDate(item.lastChecked) : '',
-            item.result?.registrar || '',
-            item.result?.creation_date ? this.formatDate(item.result.creation_date) : '',
-            item.result?.expiration_date ? this.formatDate(item.result.expiration_date) : ''
-        ]);
-
-        return [headers, ...rows].map(row => 
-            row.map(field => `"${field}"`).join(',')
-        ).join('\n');
-    }
-
-    toggleFilterPanel() {
-        const panel = document.getElementById('filter-sort-panel');
-        panel.classList.toggle('hidden');
-    }
-
-    applyFilter(filter) {
-        this.currentFilter = filter;
-        this.loadWishlist();
-    }
-
-    applySorting(sort) {
-        this.currentSort = sort;
-        this.loadWishlist();
-    }
-
-    filterWishlist(wishlist, filter) {
-        if (filter === 'all') return wishlist;
-        
-        return wishlist.filter(item => {
-            switch (filter) {
-                case 'available':
-                    return item.status === true;
-                case 'taken':
-                    return item.status === false;
-                case 'unknown':
-                    return item.status === 'unknown';
-                case 'unchecked':
-                    return item.status === null;
-                default:
-                    return true;
-            }
-        });
-    }
-
-    sortWishlist(wishlist, sort) {
-        return [...wishlist].sort((a, b) => {
-            switch (sort) {
-                case 'date-desc':
-                    return new Date(b.addedDate) - new Date(a.addedDate);
-                case 'date-asc':
-                    return new Date(a.addedDate) - new Date(b.addedDate);
-                case 'name-asc':
-                    return a.domain.localeCompare(b.domain);
-                case 'name-desc':
-                    return b.domain.localeCompare(a.domain);
-                case 'status':
-                    const statusOrder = { true: 0, false: 1, 'unknown': 2, null: 3 };
-                    return (statusOrder[a.status] || 3) - (statusOrder[b.status] || 3);
-                default:
-                    return 0;
-            }
-        });
-    }
-
-    updateStats() {
-        const wishlist = this.getWishlist();
-        this.stats = {
-            total: wishlist.length,
-            available: wishlist.filter(item => item.status === true).length,
-            taken: wishlist.filter(item => item.status === false).length,
-            unknown: wishlist.filter(item => item.status === 'unknown').length,
-            unchecked: wishlist.filter(item => item.status === null).length
+        const data = {
+            exported_at: new Date().toISOString(),
+            domains: this.wishlist
         };
 
-        // UI'ı güncelle
-        document.getElementById('total-count').textContent = this.stats.total;
-        document.getElementById('available-count').textContent = this.stats.available;
-        document.getElementById('taken-count').textContent = this.stats.taken;
-        document.getElementById('unknown-count').textContent = this.stats.unknown;
+        const blob = new Blob([JSON.stringify(data, null, 2)], { 
+            type: 'application/json' 
+        });
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `domain-wishlist-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.showNotification('Wishlist dışa aktarıldı!', 'success');
     }
 
-    formatDate(dateString) {
-        if (!dateString) return '';
-        
-        try {
-            const date = new Date(dateString);
-            return date.toLocaleDateString('tr-TR', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch (error) {
-            return dateString;
+    importWishlist(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                const domains = data.domains || data;
+
+                if (!Array.isArray(domains)) {
+                    throw new Error('Geçersiz dosya formatı');
+                }
+
+                let addedCount = 0;
+                domains.forEach(item => {
+                    const domain = typeof item === 'string' ? item : item.domain;
+                    if (domain && !this.isDomainInWishlist(domain)) {
+                        this.wishlist.push({
+                            domain: domain,
+                            addedAt: new Date().toISOString(),
+                            lastChecked: item.lastChecked || null,
+                            status: item.status || 'Kontrol Edilmedi',
+                            available: item.available || null
+                        });
+                        addedCount++;
+                    }
+                });
+
+                this.saveWishlist();
+                this.renderWishlist();
+                this.showNotification(`${addedCount} domain başarıyla içe aktarıldı!`, 'success');
+
+            } catch (error) {
+                console.error('❌ Import hatası:', error);
+                this.showNotification('Dosya içe aktarılırken hata oluştu!', 'error');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    renderWishlist() {
+        const container = document.getElementById('wishlist-container');
+        if (!container) return;
+
+        if (this.wishlist.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-12">
+                    <i class="fas fa-heart text-4xl text-gray-300 mb-4"></i>
+                    <p class="text-xl text-gray-500 mb-4">İstek listeniz boş</p>
+                    <p class="text-gray-400">Domain arama sırasında beğendiğiniz domainleri buraya ekleyebilirsiniz</p>
+                </div>
+            `;
+            return;
         }
+
+        // Stat'ları hesapla
+        const available = this.wishlist.filter(item => item.available === true).length;
+        const unavailable = this.wishlist.filter(item => item.available === false).length;
+        const unchecked = this.wishlist.filter(item => item.available === null).length;
+
+        let html = `
+            <!-- İstatistikler -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm opacity-90">Toplam Domain</p>
+                            <p class="text-2xl font-bold">${this.wishlist.length}</p>
+                        </div>
+                        <i class="fas fa-list text-2xl opacity-80"></i>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-4 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm opacity-90">Müsait</p>
+                            <p class="text-2xl font-bold">${available}</p>
+                        </div>
+                        <i class="fas fa-check-circle text-2xl opacity-80"></i>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-4 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm opacity-90">Kayıtlı</p>
+                            <p class="text-2xl font-bold">${unavailable}</p>
+                        </div>
+                        <i class="fas fa-times-circle text-2xl opacity-80"></i>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-xl p-4 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm opacity-90">Kontrol Edilmedi</p>
+                            <p class="text-2xl font-bold">${unchecked}</p>
+                        </div>
+                        <i class="fas fa-question-circle text-2xl opacity-80"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Domain Listesi -->
+            <div class="space-y-4">
+        `;
+
+        this.wishlist.forEach(item => {
+            const statusIcon = item.available === true ? 'fa-check-circle text-green-500' :
+                             item.available === false ? 'fa-times-circle text-red-500' :
+                             'fa-question-circle text-gray-400';
+            
+            const statusColor = item.available === true ? 'bg-green-50 border-green-200' :
+                               item.available === false ? 'bg-red-50 border-red-200' :
+                               'bg-gray-50 border-gray-200';
+
+            html += `
+                <div class="wishlist-item ${statusColor} border-2 rounded-xl p-4 hover:shadow-lg transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas ${statusIcon} text-xl"></i>
+                            <div>
+                                <h4 class="font-bold text-lg text-gray-800">${item.domain}</h4>
+                                <p class="text-sm text-gray-600">${item.status}</p>
+                                ${item.lastChecked ? `
+                                    <p class="text-xs text-gray-500">
+                                        Son kontrol: ${new Date(item.lastChecked).toLocaleString('tr-TR')}
+                                    </p>
+                                ` : ''}
+                                ${item.error ? `
+                                    <p class="text-xs text-red-500 mt-1">
+                                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                                        ${item.error}
+                                    </p>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="check-single-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors" data-domain="${item.domain}">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button class="remove-btn px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors" data-domain="${item.domain}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        // Event listener'ları ekle
+        this.attachItemEventListeners();
+    }
+
+    attachItemEventListeners() {
+        // Tek domain kontrol butonları
+        document.querySelectorAll('.check-single-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const domain = e.currentTarget.dataset.domain;
+                const originalText = e.currentTarget.innerHTML;
+                
+                e.currentTarget.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                e.currentTarget.disabled = true;
+
+                await this.checkSingleDomain(domain);
+                this.saveWishlist();
+                this.renderWishlist();
+
+                e.currentTarget.innerHTML = originalText;
+                e.currentTarget.disabled = false;
+            });
+        });
+
+        // Remove butonları
+        document.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const domain = e.currentTarget.dataset.domain;
+                if (confirm(`${domain} adresini listeden çıkarmak istediğinizden emin misiniz?`)) {
+                    this.removeDomain(domain);
+                }
+            });
+        });
+    }
+
+    showNotification(message, type = 'info') {
+        // Basit notification sistemi
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg text-white font-medium transform transition-all duration-300 translate-x-full`;
+        
+        const bgColor = type === 'success' ? 'bg-green-500' :
+                        type === 'error' ? 'bg-red-500' :
+                        type === 'warning' ? 'bg-yellow-500' :
+                        'bg-blue-500';
+        
+        notification.classList.add(bgColor);
+        notification.textContent = message;
+
+        document.body.appendChild(notification);
+
+        // Animate in
+        setTimeout(() => {
+            notification.classList.remove('translate-x-full');
+        }, 100);
+
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.classList.add('translate-x-full');
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 300);
+        }, 3000);
     }
 }
 
-// Global instance
-var wishlistApp;
-
 // Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    wishlistApp = new WishlistApp();
+document.addEventListener('DOMContentLoaded', () => {
+    window.wishlistApp = new WishlistApp();
 }); 

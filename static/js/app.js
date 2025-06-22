@@ -6,7 +6,8 @@ class App {
     }
 
     init() {
-        // Global modül instance'larını oluştur
+        // Global modül instance'larını oluştur (sıralama önemli!)
+        window.notificationManager = new NotificationManager();
         window.domainSearch = new DomainSearchApp();
         window.resultRenderer = new ResultRenderer();
         window.wishlistManager = new WishlistManager();
@@ -14,8 +15,7 @@ class App {
         window.uiManager = new UIManager();
         window.settingsManager = new SettingsManager();
         window.aiToggle = new AIToggle();
-        window.notificationManager = new NotificationManager();
-        
+
         // Global Rate Limit Manager zaten global-rate-limit-manager.js'te initialize edildi
         // Sadece doğru çalıştığını kontrol edelim
         if (window.globalRateLimitManager) {
@@ -60,7 +60,7 @@ class App {
         window.uiManager.setupKeyboardShortcuts();
         
         // AI ayarlarını yükle ve toggle'ı başlat
-        window.settingsManager.loadAISettings();
+        window.settingsManager.loadSettings();
         window.aiToggle.setupAIToggle();
         
         // İlk yüklemede AI durumunu kontrol et

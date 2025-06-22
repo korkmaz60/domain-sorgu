@@ -107,7 +107,7 @@ class UIManager {
             settingsBtn.addEventListener('click', () => {
                 settingsModal.classList.remove('hidden');
                 settingsModal.classList.add('flex');
-                window.settingsManager.loadAISettings();
+                window.settingsManager.loadSettings();
                 // İlk tab'ı aktif yap
                 this.switchSettingsTab('ai-settings');
             });
@@ -121,7 +121,7 @@ class UIManager {
         }
         
         if (saveSettingsBtn) {
-            saveSettingsBtn.addEventListener('click', () => window.settingsManager.saveAISettings());
+            saveSettingsBtn.addEventListener('click', () => window.settingsManager.saveSettings());
         }
         
         // Modal dışına tıklayınca kapat
@@ -185,7 +185,7 @@ class UIManager {
                 if (settingsModal) {
                     settingsModal.classList.remove('hidden');
                     settingsModal.classList.add('flex');
-                    window.settingsManager.loadAISettings();
+                    window.settingsManager.loadSettings();
                     this.switchSettingsTab('ai-settings');
                 }
             });

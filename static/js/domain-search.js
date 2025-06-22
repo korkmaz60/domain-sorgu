@@ -8,12 +8,33 @@ class DomainSearchApp {
             enabled: localStorage.getItem('ai_enabled') === 'true' || false
         };
         this.searchConfig = {
-            provider: localStorage.getItem('search_provider') || 'whois',
-            porkbunApiKey: localStorage.getItem('porkbun_api_key') || '',
-            porkbunSecretKey: localStorage.getItem('porkbun_secret_key') || ''
+            provider: localStorage.getItem('domain_search_provider') || 'whois',
+            godaddyApiKey: localStorage.getItem('godaddy_api_key') || '',
+            godaddySecretKey: localStorage.getItem('godaddy_secret_key') || '',
+            aiEnabled: localStorage.getItem('ai_enabled') === 'true' || false,
+            openrouterApiKey: localStorage.getItem('openrouter_api_key') || '',
+            aiModel: localStorage.getItem('ai_model') || ''
         };
         this.currentBaseName = '';
         this.usedSuggestions = new Set();
+        this.isSearching = false;
+        this.currentResults = [];
+        
+        console.log('🔍 DomainSearch başlatıldı:');
+        console.log('📋 Config bilgileri:', {
+            provider: this.searchConfig.provider,
+            godaddyApiKeyLength: this.searchConfig.godaddyApiKey.length,
+            godaddySecretKeyLength: this.searchConfig.godaddySecretKey.length,
+            aiEnabled: this.searchConfig.aiEnabled,
+            openrouterApiKeyLength: this.searchConfig.openrouterApiKey.length,
+            aiModel: this.searchConfig.aiModel
+        });
+        console.log('💾 LocalStorage durumu:', {
+            domain_search_provider: localStorage.getItem('domain_search_provider'),
+            godaddy_api_key_length: (localStorage.getItem('godaddy_api_key') || '').length,
+            godaddy_secret_key_length: (localStorage.getItem('godaddy_secret_key') || '').length,
+            ai_enabled: localStorage.getItem('ai_enabled')
+        });
     }
 
     showLoading(show = true) {
@@ -72,7 +93,7 @@ class DomainSearchApp {
             for (const domain of domains) {
                 try {
                     const result = await this.checkSingleDomain(domain);
-                    
+            
                     if (result.error && !result.rate_limit) {
                         // Hata varsa unknown olarak işaretle
                         unknownResults.push({
@@ -80,7 +101,7 @@ class DomainSearchApp {
                             available: null,
                             error: result.error
                         });
-                    } else {
+            } else {
                         // Başarılı sonuç
                         const domainResult = {
                             domain: domain,
@@ -116,23 +137,23 @@ class DomainSearchApp {
             }
 
             // Sonuçları göster
-            this.displayCategorizedResults(domainInput, availableResults, takenResults, unknownResults, 'variations-results');
-            
-            // AI önerilerini al (eğer aktifse)
-            console.log('🔍 AI kontrol:', { enabled: this.aiConfig.enabled, hasApiKey: !!this.aiConfig.apiKey, hasModel: !!this.aiConfig.model });
-            if (this.aiConfig.enabled && this.aiConfig.apiKey && this.aiConfig.model) {
-                this.currentBaseName = domainInput;
-                this.usedSuggestions.clear(); // Yeni arama için önceki önerileri temizle
+                this.displayCategorizedResults(domainInput, availableResults, takenResults, unknownResults, 'variations-results');
+                
+                // AI önerilerini al (eğer aktifse)
+            console.log('🔍 AI kontrol:', { enabled: this.searchConfig.aiEnabled, hasApiKey: !!this.searchConfig.openrouterApiKey, hasModel: !!this.searchConfig.aiModel });
+                if (this.searchConfig.aiEnabled && this.searchConfig.openrouterApiKey && this.searchConfig.aiModel) {
+                    this.currentBaseName = domainInput;
+                    this.usedSuggestions.clear(); // Yeni arama için önceki önerileri temizle
                 // AISuggestions class'ının currentBaseName'ini de set et
                 window.aiSuggestions.currentBaseName = domainInput;
                 window.aiSuggestions.usedSuggestions.clear();
-                window.aiSuggestions.getAISuggestions(domainInput);
+                    window.aiSuggestions.getAISuggestions(domainInput);
             } else {
                 // AI kapalıysa veya ayar eksikse placeholder göster
                 const aiSuggestions = document.getElementById('ai-suggestions');
                 const aiResults = document.getElementById('ai-results');
                 
-                if (this.aiConfig.enabled && (!this.aiConfig.apiKey || !this.aiConfig.model)) {
+                if (this.searchConfig.aiEnabled && (!this.searchConfig.openrouterApiKey || !this.searchConfig.aiModel)) {
                     aiSuggestions.classList.remove('hidden');
                     aiResults.innerHTML = `
                         <div class="bg-yellow-100 border border-yellow-200 rounded-xl p-6 text-center">
@@ -174,7 +195,7 @@ class DomainSearchApp {
     // Yardımcı fonksiyon - tek domain kontrolü
     async checkSingleDomain(domain) {
         // Porkbun API kullanılıyorsa global rate limit manager'ı kullan
-        if (this.searchConfig.provider === 'porkbun' && window.globalRateLimitManager) {
+        if (this.searchConfig.provider === 'godaddy' && window.globalRateLimitManager) {
             console.log(`🔄 Using rate limit manager for: ${domain}`);
             return await window.globalRateLimitManager.makeRequest(domain, async () => {
                 return await this.makeDirectAPICall(domain);
@@ -188,28 +209,47 @@ class DomainSearchApp {
 
     // Direkt API çağrısı (queue'dan veya WHOIS için)
     async makeDirectAPICall(domain) {
-        const requestBody = { 
-            domain,
-            provider: this.searchConfig.provider
-        };
+            const requestBody = { 
+                domain,
+                provider: this.searchConfig.provider
+            };
 
-        if (this.searchConfig.provider === 'porkbun') {
-            requestBody.porkbunApiKey = this.searchConfig.porkbunApiKey;
-            requestBody.porkbunSecretKey = this.searchConfig.porkbunSecretKey;
-        }
+            if (this.searchConfig.provider === 'godaddy') {
+                requestBody.godaddy_api_key = this.searchConfig.godaddyApiKey;
+                requestBody.godaddy_secret_key = this.searchConfig.godaddySecretKey;
+                
+                console.log('🔑 GoDaddy API anahtarları kontrol:', {
+                    apiKeyLength: this.searchConfig.godaddyApiKey.length,
+                    secretKeyLength: this.searchConfig.godaddySecretKey.length,
+                    apiKeyPreview: this.searchConfig.godaddyApiKey.substring(0, 8) + '...',
+                    secretKeyPreview: this.searchConfig.godaddySecretKey.substring(0, 8) + '...'
+                });
+            }
 
         console.log(`📡 Making API call for: ${domain} via ${this.searchConfig.provider}`);
-
-        const response = await fetch('/api/check-domain', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody)
+        console.log('📦 Request body:', {
+            domain: requestBody.domain,
+            provider: requestBody.provider,
+            hasGodaddyApiKey: !!requestBody.godaddy_api_key,
+            hasGodaddySecretKey: !!requestBody.godaddy_secret_key
         });
 
-        const result = await response.json();
-        console.log(`📡 API response for ${domain}: ${result.status}`);
+            const response = await fetch('/api/check-domain', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const result = await response.json();
+        console.log(`📡 API response for ${domain}:`, {
+            status: result.status,
+            available: result.available,
+            provider: result.provider,
+            error: result.error || 'none',
+            httpStatus: response.status
+        });
         
         return result;
     }
@@ -417,4 +457,197 @@ class DomainSearchApp {
             </div>
         `;
     }
-} 
+
+    async checkVariations(baseName, extensions) {
+        if (this.isSearching) {
+            window.notificationManager.showWarning('Önceki arama devam ediyor...');
+            return;
+        }
+
+        if (!baseName || extensions.length === 0) {
+            window.notificationManager.showError('Domain adı ve en az bir uzantı seçilmelidir!');
+            return;
+        }
+
+        this.isSearching = true;
+        this.showLoading(true);
+        
+        try {
+            const requestBody = {
+                base_name: baseName,
+                extensions: extensions,
+                provider: this.searchConfig.provider
+            };
+
+            // API key'leri ekle (eğer provider GoDaddy ise)
+            if (this.searchConfig.provider === 'godaddy') {
+                if (!this.searchConfig.godaddyApiKey || !this.searchConfig.godaddySecretKey) {
+                    window.notificationManager.showError('GoDaddy API anahtarları eksik! Ayarlardan ekleyin.');
+                    return;
+                }
+                requestBody.godaddy_api_key = this.searchConfig.godaddyApiKey;
+                requestBody.godaddy_secret_key = this.searchConfig.godaddySecretKey;
+            }
+
+            console.log('📡 Varyasyon kontrolü başlatılıyor:', {
+                provider: this.searchConfig.provider,
+                baseName,
+                extensionCount: extensions.length
+            });
+
+            const response = await fetch('/api/check-variations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const results = await response.json();
+            console.log('📊 Varyasyon sonuçları alındı:', results.length);
+
+            this.currentResults = results;
+            
+            // Rate limit kontrolü
+            this.handleRateLimitedResults(results);
+            
+            // Sonuçları göster
+            window.resultRenderer.renderResults(results, this.searchConfig.provider);
+            
+            // AI önerisi varsa göster
+            if (this.searchConfig.aiEnabled && this.searchConfig.openrouterApiKey) {
+                window.aiSuggestions.generateSuggestions(baseName);
+            }
+
+        } catch (error) {
+            console.error('❌ Varyasyon kontrolü hatası:', error);
+            window.notificationManager.showError(`Arama hatası: ${error.message}`);
+        } finally {
+            this.isSearching = false;
+            this.showLoading(false);
+        }
+    }
+
+    async checkBulkDomains(domains) {
+        if (this.isSearching) {
+            window.notificationManager.showWarning('Önceki arama devam ediyor...');
+            return;
+        }
+
+        if (!domains || domains.length === 0) {
+            window.notificationManager.showError('En az bir domain girilmelidir!');
+            return;
+        }
+
+        this.isSearching = true;
+        this.showLoading(true);
+
+        try {
+            const requestBody = {
+                domains: domains,
+                provider: this.searchConfig.provider
+            };
+
+            // API key'leri ekle
+            if (this.searchConfig.provider === 'godaddy') {
+                if (!this.searchConfig.godaddyApiKey || !this.searchConfig.godaddySecretKey) {
+                    window.notificationManager.showError('GoDaddy API anahtarları eksik!');
+                    return;
+                }
+                requestBody.godaddy_api_key = this.searchConfig.godaddyApiKey;
+                requestBody.godaddy_secret_key = this.searchConfig.godaddySecretKey;
+            }
+
+            console.log('📡 Toplu kontrol başlatılıyor:', {
+                provider: this.searchConfig.provider,
+                domainCount: domains.length
+            });
+
+            const response = await fetch('/api/check-multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const results = await response.json();
+            console.log('📊 Toplu sonuçlar alındı:', results.length);
+
+            this.currentResults = results;
+            
+            // Rate limit kontrolü
+            this.handleRateLimitedResults(results);
+            
+            // Sonuçları göster
+            window.resultRenderer.renderResults(results, this.searchConfig.provider);
+
+        } catch (error) {
+            console.error('❌ Toplu kontrol hatası:', error);
+            window.notificationManager.showError(`Arama hatası: ${error.message}`);
+        } finally {
+            this.isSearching = false;
+            this.showLoading(false);
+        }
+    }
+
+    handleRateLimitedResults(results) {
+        const rateLimitedResults = results.filter(r => r.rate_limit || r.status === 'Rate Limit');
+        
+        if (rateLimitedResults.length > 0) {
+            console.log(`🚫 ${rateLimitedResults.length} domain rate limit'e takıldı`);
+            
+            // Global rate limit manager'a bildir
+            if (window.globalRateLimitManager) {
+                rateLimitedResults.forEach(result => {
+                    window.globalRateLimitManager.addToRetryQueue(result.domain);
+                });
+            }
+        }
+    }
+
+    updateProvider(newProvider) {
+        console.log(`🔄 Provider değiştiriliyor: ${this.searchConfig.provider} → ${newProvider}`);
+        
+        this.searchConfig.provider = newProvider;
+        localStorage.setItem('domain_search_provider', newProvider);
+        
+        window.notificationManager.showInfo(`Arama sağlayıcısı ${newProvider === 'whois' ? 'WHOIS' : 'GoDaddy API'} olarak değiştirildi`);
+        
+        console.log('✅ Provider güncellendi:', this.searchConfig.provider);
+    }
+
+    // API anahtarlarını güncelle
+    updateGodaddyKeys(apiKey, secretKey) {
+        this.searchConfig.godaddyApiKey = apiKey;
+        this.searchConfig.godaddySecretKey = secretKey;
+        
+        localStorage.setItem('godaddy_api_key', apiKey);
+        localStorage.setItem('godaddy_secret_key', secretKey);
+        
+        console.log('🔑 GoDaddy API anahtarları güncellendi');
+    }
+
+    // AI ayarlarını güncelle
+    updateAIConfig(enabled, apiKey, model) {
+        this.searchConfig.aiEnabled = enabled;
+        this.searchConfig.openrouterApiKey = apiKey;
+        this.searchConfig.aiModel = model;
+        
+        localStorage.setItem('ai_enabled', enabled.toString());
+        localStorage.setItem('openrouter_api_key', apiKey);
+        localStorage.setItem('ai_model', model);
+        
+        console.log('🤖 AI konfigürasyonu güncellendi:', { enabled, model });
+    }
+}
+
+// Not: DomainSearchApp class'ı app.js'de initialize edilir 

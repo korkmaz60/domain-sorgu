@@ -2,681 +2,368 @@
 
 class GlobalRateLimitManager {
     constructor() {
-        this.isRateLimited = false;
-        this.requestQueue = [];
+        this.retryQueue = [];
         this.isProcessing = false;
-        this.rateLimitEndTime = null;
-        this.minRequestInterval = 1000; // 1 saniye minimum aralık
-        this.lastRequestTime = 0;
-        this.rateLimitCount = 0; // Rate limit sayacı
-        this.maxRateLimitRetries = 2; // Maksimum 3 defa rate limit
+        this.rateLimitCount = 0;
+        this.lastRateLimit = null;
+        this.retryAttempts = new Map(); // domain -> attempt count
+        this.maxRetryAttempts = 3;
+        this.baseDelay = 10000; // 10 saniye base delay
+        this.rateLimitWindow = 60000; // 1 dakika window
         
-        console.log('🔧 Global Rate Limit Manager initialized');
+        console.log('🌐 Global Rate Limit Manager başlatıldı');
     }
 
-    // Ana istek fonksiyonu
-    async makeRequest(domain, apiCallFunction) {
-        return new Promise((resolve, reject) => {
-            const request = {
-                id: Date.now() + Math.random(),
-                domain,
-                apiCallFunction,
-                resolve,
-                reject,
-                timestamp: Date.now()
-            };
-
-            this.requestQueue.push(request);
-            console.log(`📝 Queued request for ${domain} (Queue: ${this.requestQueue.length})`);
-            
-            this.showQueueStatus();
-            this.processNextRequest();
-        });
-    }
-
-    // Sıradaki isteği işle
-    async processNextRequest() {
-        if (this.isProcessing || this.requestQueue.length === 0) {
-            return;
+    async makeRequest(domain, requestFunction) {
+        const key = this.generateRequestKey(domain);
+        
+        // Rate limit kontrolü
+        if (this.isInRateLimit()) {
+            console.log(`🚫 Rate limit aktif, ${domain} kuyruğa ekleniyor`);
+            return this.addToRetryQueue(domain, requestFunction);
         }
 
-        this.isProcessing = true;
-
-        while (this.requestQueue.length > 0) {
-            // Rate limit aktifse bekle
-            if (this.isRateLimited) {
-                console.log(`⏳ Rate limited - waiting...`);
-                await this.waitForRateLimit();
+        try {
+            const result = await requestFunction();
+            
+            // Rate limit kontrolü sonuçta
+            if (this.isResultRateLimited(result)) {
+                console.log(`📊 Rate limit sonuç algılandı: ${domain}`);
+                return this.handleRateLimitedResult(domain, result, requestFunction);
             }
 
-            const request = this.requestQueue.shift();
-            if (!request) break;
+            // Başarılı sonuç için retry attempt'i sıfırla
+            this.retryAttempts.delete(key);
+            return result;
 
-            try {
-                console.log(`🚀 Processing: ${request.domain}`);
-                this.showProcessingStatus(request.domain);
+        } catch (error) {
+            console.error(`❌ Request error for ${domain}:`, error);
+            throw error;
+        }
+    }
 
-                // İstekler arası minimum bekleme
-                const timeSinceLastRequest = Date.now() - this.lastRequestTime;
-                if (timeSinceLastRequest < this.minRequestInterval) {
-                    const waitTime = this.minRequestInterval - timeSinceLastRequest;
-                    console.log(`⏱️ Waiting ${waitTime}ms between requests`);
-                    await this.sleep(waitTime);
-                }
+    isResultRateLimited(result) {
+        if (!result) return false;
+        
+        return (
+            result.rate_limit === true ||
+            result.status === 'Rate Limit' ||
+            (result.error && result.error.includes('rate limit')) ||
+            (result.error && result.error.includes('Rate limit')) ||
+            (result.status && result.status.includes('Rate Limit'))
+        );
+    }
 
-                // API isteğini yap
-                const result = await request.apiCallFunction();
-                this.lastRequestTime = Date.now();
+    async handleRateLimitedResult(domain, result, requestFunction) {
+        this.rateLimitCount++;
+        this.lastRateLimit = Date.now();
+        
+        // Wait seconds bilgisini al
+        const waitSeconds = result.wait_seconds || result.retry_after || 60;
+        
+        console.log(`⏳ GoDaddy API rate limit: ${domain}, ${waitSeconds}s beklenecek`);
+        
+        // UI notification
+        this.showRateLimitNotification(domain, waitSeconds);
+        
+        // Retry queue'ya ekle
+        return this.addToRetryQueue(domain, requestFunction, waitSeconds * 1000);
+    }
 
-                // Rate limit kontrolü
-                if (this.isRateLimitResponse(result)) {
-                    console.log(`🚫 Rate limit detected for ${request.domain}`);
+    async addToRetryQueue(domain, requestFunction = null, customDelay = null) {
+        const key = this.generateRequestKey(domain);
+        const currentAttempts = this.retryAttempts.get(key) || 0;
+        
+        if (currentAttempts >= this.maxRetryAttempts) {
+            console.log(`🚫 Max retry attempts reached for ${domain}`);
+            this.showMaxRetryNotification(domain);
+            
+            return {
+                domain: domain,
+                available: null,
+                status: 'Max Retry Aşıldı',
+                error: `${this.maxRetryAttempts} deneme sonrası başarısız`,
+                rate_limit: true
+            };
+        }
+
+        // Retry attempt'i artır
+        this.retryAttempts.set(key, currentAttempts + 1);
+        
+        // Delay hesapla
+        const delay = customDelay || this.calculateRetryDelay(currentAttempts);
+        
+        const queueItem = {
+            domain: domain,
+            requestFunction: requestFunction,
+            retryAfter: Date.now() + delay,
+            attempts: currentAttempts + 1
+        };
+
+        // Queue'ya ekle (zaten varsa güncelle)
+        const existingIndex = this.retryQueue.findIndex(item => item.domain === domain);
+        if (existingIndex !== -1) {
+            this.retryQueue[existingIndex] = queueItem;
+        } else {
+            this.retryQueue.push(queueItem);
+        }
+
+        console.log(`🔄 ${domain} retry queue'ya eklendi (${delay}ms delay, attempt ${currentAttempts + 1})`);
+        
+        // Processing başlat
+        if (!this.isProcessing) {
+            this.startProcessing();
+        }
+
+        // Geçici sonuç döndür
+        return {
+            domain: domain,
+            available: null,
+            status: 'Retry Kuyruğunda',
+            error: `${Math.ceil(delay / 1000)} saniye sonra yeniden denenecek`,
+            rate_limit: true,
+            retry_after: delay / 1000,
+            queue_position: this.retryQueue.length
+        };
+    }
+
+    async startProcessing() {
+        if (this.isProcessing) return;
+        
+        this.isProcessing = true;
+        console.log('🔄 Retry queue processing başlatıldı');
+
+        while (this.retryQueue.length > 0) {
+            const now = Date.now();
+            
+            // Ready olan item'ları bul
+            const readyItems = this.retryQueue.filter(item => item.retryAfter <= now);
+            
+            if (readyItems.length === 0) {
+                // En yakın retry time'ını bekle
+                const nextRetry = Math.min(...this.retryQueue.map(item => item.retryAfter));
+                const waitTime = Math.max(1000, nextRetry - now); // En az 1 saniye bekle
+                
+                console.log(`⏰ ${waitTime}ms bekliyor, queue size: ${this.retryQueue.length}`);
+                await this.sleep(waitTime);
+                continue;
+            }
+
+            // Ready item'ları işle
+            for (const item of readyItems) {
+                try {
+                    console.log(`🔄 Retry işleniyor: ${item.domain} (attempt ${item.attempts})`);
                     
-                    // Rate limit sayacını artır
-                    this.rateLimitCount++;
-                    
-                    // 3 defa rate limit alındıysa işlemleri durdur
-                    if (this.rateLimitCount >= this.maxRateLimitRetries) {
-                        console.log(`❌ Maximum rate limit retries (${this.maxRateLimitRetries}) reached - stopping operations`);
+                    if (item.requestFunction) {
+                        const result = await item.requestFunction();
                         
-                        // Tüm bekleyen istekleri iptal et
-                        this.cancelAllRequests();
-                        
-                        // WHOIS'e geçiş önerisi göster
-                        this.showWhoisSuggestion();
-                        
-                        // İşlemleri durdur
-                        this.isProcessing = false;
-                        this.hideQueueStatus();
-                        return;
+                        // Sonucu kontrol et
+                        if (this.isResultRateLimited(result)) {
+                            console.log(`🚫 Hala rate limited: ${item.domain}`);
+                            
+                            // Tekrar kuyruğa ekle (recursive)
+                            await this.handleRateLimitedResult(item.domain, result, item.requestFunction);
+                        } else {
+                            console.log(`✅ Retry başarılı: ${item.domain}`);
+                            
+                            // Başarı notification'ı
+                            this.showRetrySuccessNotification(item.domain, result);
+                            
+                            // Results'ı güncelle
+                            this.updateResultsDisplay(item.domain, result);
+                            
+                            // Retry attempt'i temizle
+                            const key = this.generateRequestKey(item.domain);
+                            this.retryAttempts.delete(key);
+                        }
                     }
                     
-                    // İsteği geri kuyruğa ekle
-                    this.requestQueue.unshift(request);
-                    
-                                         // Rate limit'i başlat - 12 saniye garanti
-                     const waitSeconds = 12;
-                    await this.activateRateLimit(waitSeconds);
-                    
-                    continue; // Bu isteği tekrar dene
+                } catch (error) {
+                    console.error(`❌ Retry error for ${item.domain}:`, error);
+                    this.showRetryErrorNotification(item.domain, error);
                 }
-
-                // Başarılı sonuç - rate limit sayacını sıfırla
-                this.rateLimitCount = 0;
-                console.log(`✅ Success for ${request.domain}: ${result.status}`);
-                request.resolve(result);
-
-            } catch (error) {
-                console.error(`❌ Error for ${request.domain}:`, error);
-                request.reject(error);
+                
+                // Queue'dan çıkar
+                const index = this.retryQueue.findIndex(i => i.domain === item.domain);
+                if (index !== -1) {
+                    this.retryQueue.splice(index, 1);
+                }
+                
+                // Rate limit'e karşı delay
+                await this.sleep(1000);
             }
         }
 
         this.isProcessing = false;
-        this.hideQueueStatus();
-        console.log(`✅ Queue processing completed`);
+        console.log('✅ Retry queue processing tamamlandı');
     }
 
-    // Rate limit response kontrolü
-    isRateLimitResponse(result) {
-        return result.rate_limit || 
-               (result.status && result.status.toLowerCase().includes('rate limit')) ||
-               (result.error && result.error.toLowerCase().includes('rate limit'));
+    calculateRetryDelay(attempt) {
+        // Exponential backoff with jitter
+        const exponentialDelay = this.baseDelay * Math.pow(2, attempt);
+        const jitter = Math.random() * 1000; // 0-1000ms jitter
+        return Math.min(exponentialDelay + jitter, 120000); // Max 2 dakika
     }
 
-    // Rate limit'i aktive et
-    async activateRateLimit(waitSeconds) {
-        this.isRateLimited = true;
-        this.rateLimitEndTime = Date.now() + (waitSeconds * 1000);
-        
-        console.log(`🕐 Rate limit activated - waiting ${waitSeconds} seconds`);
-        
-        // UI güncellemeleri
-        this.hideQueueStatus();
-        this.showRateLimitNotification(waitSeconds);
-        
-        // Geri sayım
-        await this.startCountdown(waitSeconds);
-        
-        // Rate limit bitti
-        this.isRateLimited = false;
-        this.rateLimitEndTime = null;
-        
-        console.log(`🟢 Rate limit cleared`);
-        this.hideRateLimitNotification();
+    generateRequestKey(domain) {
+        return domain.toLowerCase();
     }
 
-    // Rate limit bitene kadar bekle
-    async waitForRateLimit() {
-        if (!this.isRateLimited || !this.rateLimitEndTime) {
+    isInRateLimit() {
+        if (!this.lastRateLimit) return false;
+        
+        const timeSinceLastRateLimit = Date.now() - this.lastRateLimit;
+        return timeSinceLastRateLimit < this.rateLimitWindow;
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // UI Notification Methods
+    showRateLimitNotification(domain, waitSeconds) {
+        const message = `🚫 ${domain} - GoDaddy API rate limit (${waitSeconds}s bekle)`;
+        this.showNotification(message, 'warning', 5000);
+        
+        // Console için detaylı bilgi
+        console.log(`🚫 RATE LIMIT: ${domain}`);
+        console.log(`⏰ Wait time: ${waitSeconds} seconds`);
+        console.log(`📊 Total rate limits: ${this.rateLimitCount}`);
+    }
+
+    showRetrySuccessNotification(domain, result) {
+        const availableText = result.available === true ? '✅ Müsait' : 
+                            result.available === false ? '❌ Kayıtlı' : '❓ Bilinmeyen';
+        
+        const message = `🔄 ${domain} - Retry başarılı! ${availableText}`;
+        this.showNotification(message, 'success', 3000);
+    }
+
+    showRetryErrorNotification(domain, error) {
+        const message = `❌ ${domain} - Retry hatası: ${error.message}`;
+        this.showNotification(message, 'error', 4000);
+    }
+
+    showMaxRetryNotification(domain) {
+        const message = `🚫 ${domain} - Max retry aşıldı, manuel kontrol gerekli`;
+        this.showNotification(message, 'error', 6000);
+    }
+
+    showNotification(message, type = 'info', duration = 3000) {
+        // Window notification manager kullan
+        if (window.notificationManager) {
+            if (type === 'warning') {
+                window.notificationManager.showWarning(message);
+            } else if (type === 'success') {
+                window.notificationManager.showSuccess(message);
+            } else if (type === 'error') {
+                window.notificationManager.showError(message);
+            } else {
+                window.notificationManager.showInfo(message);
+            }
             return;
         }
 
-        const remainingTime = this.rateLimitEndTime - Date.now();
-        if (remainingTime > 0) {
-            await this.sleep(remainingTime);
-        }
-    }
-
-    // Geri sayım
-    async startCountdown(seconds) {
-        return new Promise((resolve) => {
-            let remaining = seconds;
-            
-            const tick = () => {
-                if (remaining <= 0) {
-                    resolve();
-                    return;
-                }
-                
-                this.updateCountdownDisplay(remaining);
-                remaining--;
-                setTimeout(tick, 1000);
-            };
-            
-            tick();
-        });
-    }
-
-    // Geri sayım display güncelle
-    updateCountdownDisplay(seconds) {
-        const notification = document.getElementById('rate-limit-notification');
-        if (!notification) return;
-
-        const countdownEl = notification.querySelector('.countdown-text');
-        const progressEl = notification.querySelector('.countdown-progress');
-        
-        if (countdownEl) {
-            countdownEl.textContent = `${seconds} saniye kaldı`;
-        }
-        
-                 if (progressEl) {
-             const totalSeconds = 12; // 12 saniye garanti
-            const progress = ((totalSeconds - seconds) / totalSeconds) * 100;
-            progressEl.style.width = `${Math.max(0, Math.min(100, progress))}%`;
-        }
-    }
-
-    // Queue durumu göster
-    showQueueStatus() {
-        if (this.requestQueue.length === 0) return;
-
-        let statusEl = document.getElementById('queue-status');
-        if (!statusEl) {
-            statusEl = document.createElement('div');
-            statusEl.id = 'queue-status';
-            statusEl.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #3b82f6;
-                color: white;
-                padding: 12px 16px;
-                border-radius: 8px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                z-index: 9998;
-                font-size: 14px;
-                font-weight: 500;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            `;
-            document.body.appendChild(statusEl);
-        }
-
-        statusEl.innerHTML = `
-            <div style="width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <span>${this.requestQueue.length} sorgu sırada</span>
-        `;
-    }
-
-    // İşleniyor durumu göster
-    showProcessingStatus(domain) {
-        let statusEl = document.getElementById('processing-status');
-        if (!statusEl) {
-            statusEl = document.createElement('div');
-            statusEl.id = 'processing-status';
-            statusEl.style.cssText = `
-                position: fixed;
-                top: 80px;
-                right: 20px;
-                background: #10b981;
-                color: white;
-                padding: 8px 12px;
-                border-radius: 6px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                z-index: 9997;
-                font-size: 12px;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            `;
-            document.body.appendChild(statusEl);
-        }
-
-        statusEl.innerHTML = `
-            <div style="width: 8px; height: 8px; background: white; border-radius: 50%; animation: pulse 1.5s ease-in-out infinite;"></div>
-            <span>Kontrol: ${domain}</span>
-        `;
-
-        // 3 saniye sonra gizle
-        setTimeout(() => {
-            if (statusEl && statusEl.parentNode) {
-                statusEl.remove();
-            }
-        }, 3000);
-    }
-
-    // Queue durumu gizle
-    hideQueueStatus() {
-        const statusEl = document.getElementById('queue-status');
-        if (statusEl) {
-            statusEl.remove();
-        }
-    }
-
-    // Rate limit bildirimi göster
-    showRateLimitNotification(seconds) {
-        this.hideRateLimitNotification();
-
+        // Fallback: Manuel notification
         const notification = document.createElement('div');
-        notification.id = 'rate-limit-notification';
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #f97316;
-            color: white;
-            padding: 16px;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-            z-index: 9999;
-            max-width: 320px;
-            transform: translateX(100%);
-            opacity: 0;
-            transition: all 0.3s ease;
-        `;
+        notification.className = `fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
         
+        const bgColor = type === 'success' ? 'bg-green-500' :
+                        type === 'error' ? 'bg-red-500' :
+                        type === 'warning' ? 'bg-yellow-500' :
+                        'bg-blue-500';
+        
+        notification.classList.add(bgColor);
         notification.innerHTML = `
-            <div style="display: flex; align-items: flex-start; gap: 12px;">
-                <div style="flex-shrink: 0; margin-top: 2px;">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                    </svg>
+            <div class="flex items-start">
+                <div class="text-white text-sm font-medium pr-2">
+                    ${message}
                 </div>
-                <div style="flex: 1;">
-                    <h4 style="margin: 0; font-size: 14px; font-weight: 600;">Rate Limit Aktif</h4>
-                    <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9;">Porkbun API limiti aşıldı</p>
-                    <div style="margin-top: 12px;">
-                        <div class="countdown-text" style="font-size: 14px; font-weight: 500;">${seconds} saniye kaldı</div>
-                        <div style="width: 100%; background: rgba(255,255,255,0.3); border-radius: 4px; height: 6px; margin-top: 6px; overflow: hidden;">
-                            <div class="countdown-progress" style="background: white; height: 100%; border-radius: 4px; width: 0%; transition: width 1s ease;"></div>
-                        </div>
-                    </div>
-                    <p style="margin: 8px 0 0 0; font-size: 11px; opacity: 0.75;">Sorgular otomatik devam edecek</p>
-                </div>
+                <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200 ml-auto">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
         `;
 
         document.body.appendChild(notification);
 
-        // Animasyonla göster
+        // Animate in
         setTimeout(() => {
-            notification.style.transform = 'translateX(0)';
-            notification.style.opacity = '1';
+            notification.classList.remove('translate-x-full');
         }, 100);
+
+        // Auto remove
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }, duration);
     }
 
-    // Rate limit bildirimi gizle
-    hideRateLimitNotification() {
-        const notification = document.getElementById('rate-limit-notification');
-        if (notification) {
-            notification.style.transform = 'translateX(100%)';
-            notification.style.opacity = '0';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 300);
+    updateResultsDisplay(domain, result) {
+        // Ana sonuç display'ini güncelle
+        if (window.resultRenderer && window.domainSearch) {
+            // Mevcut sonuçları bul ve güncelle
+            const currentResults = window.domainSearch.currentResults || [];
+            const index = currentResults.findIndex(r => r.domain === domain);
+            
+            if (index !== -1) {
+                currentResults[index] = result;
+                window.resultRenderer.renderResults(currentResults, window.domainSearch.searchConfig.provider);
+            }
         }
     }
 
-    // Yardımcı fonksiyon - bekleme
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    // Queue durumu
-    getQueueStatus() {
+    // Stats Methods
+    getStats() {
         return {
-            isRateLimited: this.isRateLimited,
-            queueLength: this.requestQueue.length,
+            queueSize: this.retryQueue.length,
+            rateLimitCount: this.rateLimitCount,
             isProcessing: this.isProcessing,
-            rateLimitEndTime: this.rateLimitEndTime
+            lastRateLimit: this.lastRateLimit,
+            activeRetries: Array.from(this.retryAttempts.entries())
         };
     }
 
-    // Queue temizle
     clearQueue() {
-        console.log(`🗑️ Clearing ${this.requestQueue.length} requests`);
-        
-        this.requestQueue.forEach(request => {
-            request.reject(new Error('Request cancelled'));
-        });
-        
-        this.requestQueue = [];
+        this.retryQueue = [];
+        this.retryAttempts.clear();
         this.isProcessing = false;
-        this.hideQueueStatus();
-        this.hideRateLimitNotification();
+        console.log('🧹 Retry queue temizlendi');
     }
 
-    // Tüm bekleyen istekleri iptal et
-    cancelAllRequests() {
-        console.log(`❌ Cancelling ${this.requestQueue.length} pending requests`);
-        
-        // Tüm bekleyen isteklere hata gönder
-        this.requestQueue.forEach(request => {
-            request.reject(new Error('Rate limit exceeded - operations cancelled'));
-        });
-        
-        // Queue'yu temizle
-        this.requestQueue = [];
-        this.hideQueueStatus();
-        this.hideRateLimitNotification();
-        
-        // Loading modal'ını da kapat (güvenlik için)
-        this.forceHideLoading();
-    }
-
-    // Loading modal'ını zorla kapat
-    forceHideLoading() {
-        try {
-            const loading = document.getElementById('loading');
-            if (loading) {
-                loading.classList.add('hidden');
-                loading.classList.remove('flex');
-                console.log('🔧 Loading modal force closed');
-            }
-        } catch (error) {
-            console.error('❌ Error force closing loading modal:', error);
-        }
-    }
-
-    // WHOIS'e geçiş önerisi göster
-    showWhoisSuggestion() {
-        // Varolan bildirimleri gizle
-        this.hideQueueStatus();
-        this.hideRateLimitNotification();
-
-        // WHOIS önerisi bildirimi oluştur
-        let suggestionEl = document.getElementById('whois-suggestion');
-        if (!suggestionEl) {
-            suggestionEl = document.createElement('div');
-            suggestionEl.id = 'whois-suggestion';
-            document.body.appendChild(suggestionEl);
-        }
-
-        suggestionEl.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-            padding: 24px;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-            z-index: 10000;
-            max-width: 500px;
-            width: 90%;
-            text-align: center;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            animation: slideInScale 0.4s ease-out;
-        `;
-
-        suggestionEl.innerHTML = `
-            <style>
-                @keyframes slideInScale {
-                    from {
-                        opacity: 0;
-                        transform: translate(-50%, -50%) scale(0.8);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translate(-50%, -50%) scale(1);
-                    }
-                }
-                @keyframes slideOutScale {
-                    from {
-                        opacity: 1;
-                        transform: translate(-50%, -50%) scale(1);
-                    }
-                    to {
-                        opacity: 0;
-                        transform: translate(-50%, -50%) scale(0.8);
-                    }
-                }
-            </style>
-            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
-            <h3 style="font-size: 24px; font-weight: bold; margin: 0 0 12px 0;">
-                Rate Limit Aşıldı!
-            </h3>
-            <p style="font-size: 16px; margin: 0 0 20px 0; opacity: 0.9; line-height: 1.5;">
-                Porkbun API'si 3 defa rate limit hatası verdi.<br>
-                Daha hızlı sonuç almak için <strong>WHOIS</strong> sorgusuna geçmenizi öneriyoruz.
-            </p>
-            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                <button onclick="window.globalRateLimitManager.switchToWhois()" 
-                        style="background: white; color: #d97706; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: all 0.2s;">
-                    WHOIS'e Geç
-                </button>
-                <button onclick="window.globalRateLimitManager.hideWhoisSuggestion()" 
-                        style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: all 0.2s;">
-                    Kapat
-                </button>
-            </div>
-        `;
-
-        console.log('🔄 WHOIS suggestion displayed');
-    }
-
-    // WHOIS'e geçiş yap
-    switchToWhois() {
-        console.log('🔄 Switching to WHOIS provider');
-        
-        // Settings manager'dan WHOIS'e geç
-        if (window.settingsManager) {
-            window.settingsManager.updateProvider('whois');
-        }
-        
-        // Rate limit sayacını sıfırla
-        this.rateLimitCount = 0;
-        this.isRateLimited = false;
-        this.isProcessing = false;
-        
-        // Bildirimi gizle
-        this.hideWhoisSuggestion();
-        
-        // Başarı mesajı göster
-        this.showSuccessMessage('WHOIS sorgusuna geçildi! Lütfen aramayı tekrar başlatın.');
-        
-        // 3 saniye sonra aramayı tekrar başlatma önerisi göster
-        setTimeout(() => {
-            this.showRestartSuggestion();
-        }, 3000);
-    }
-
-    // WHOIS önerisini gizle
-    hideWhoisSuggestion() {
-        const suggestionEl = document.getElementById('whois-suggestion');
-        if (suggestionEl) {
-            suggestionEl.style.animation = 'slideOutScale 0.3s ease-in forwards';
-            setTimeout(() => {
-                if (suggestionEl.parentNode) {
-                    suggestionEl.parentNode.removeChild(suggestionEl);
-                }
-            }, 300);
-        }
-    }
-
-    // Başarı mesajı göster
-    showSuccessMessage(message) {
-        let messageEl = document.createElement('div');
-        messageEl.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #10b981;
-            color: white;
-            padding: 16px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 9999;
-            font-size: 14px;
-            font-weight: 500;
-            max-width: 350px;
-            animation: slideIn 0.3s ease-out;
-        `;
-
-        messageEl.innerHTML = `
-            <style>
-                @keyframes slideIn {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-                @keyframes slideOut {
-                    from { transform: translateX(0); opacity: 1; }
-                    to { transform: translateX(100%); opacity: 0; }
-                }
-            </style>
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 16px;">✅</span>
-                <span>${message}</span>
-            </div>
-        `;
-
-        document.body.appendChild(messageEl);
-
-        // 5 saniye sonra otomatik gizle
-        setTimeout(() => {
-            messageEl.style.animation = 'slideOut 0.3s ease-in forwards';
-            setTimeout(() => {
-                if (messageEl.parentNode) {
-                    messageEl.parentNode.removeChild(messageEl);
-                }
-            }, 300);
-        }, 5000);
-    }
-
-    // Rate limit sayacını sıfırla (yeni arama için)
+    // Rate limit sayacını sıfırla
     resetRateLimitCount() {
         this.rateLimitCount = 0;
-        console.log('🔄 Rate limit count reset');
+        this.lastRateLimit = null;
+        console.log('🔄 Rate limit count sıfırlandı');
     }
 
-    // Aramayı yeniden başlatma önerisi göster
-    showRestartSuggestion() {
-        let suggestionEl = document.getElementById('restart-suggestion');
-        if (suggestionEl) {
-            suggestionEl.remove(); // Varsa kaldır
-        }
+    // Advanced Rate Limit Detection
+    detectAdvancedRateLimit(responseText, statusCode) {
+        const rateLimitIndicators = [
+            'rate limit',
+            'too many requests',
+            'quota exceeded',
+            'throttled',
+            'retry after',
+            'rate-limited',
+            'api limit',
+            'request limit'
+        ];
 
-        suggestionEl = document.createElement('div');
-        suggestionEl.id = 'restart-suggestion';
-        suggestionEl.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-            z-index: 9999;
-            max-width: 350px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            animation: slideInFromBottom 0.4s ease-out;
-        `;
+        const text = responseText.toLowerCase();
+        const hasRateLimitText = rateLimitIndicators.some(indicator => text.includes(indicator));
+        const hasRateLimitStatus = statusCode === 429 || statusCode === 503;
 
-        suggestionEl.innerHTML = `
-            <style>
-                @keyframes slideInFromBottom {
-                    from {
-                        opacity: 0;
-                        transform: translateY(100%);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                }
-                @keyframes slideOutToBottom {
-                    from {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                    to {
-                        opacity: 0;
-                        transform: translateY(100%);
-                    }
-                }
-            </style>
-            <div style="display: flex; align-items: flex-start; gap: 12px;">
-                <div style="flex-shrink: 0; margin-top: 2px;">
-                    <span style="font-size: 20px;">🔄</span>
-                </div>
-                <div style="flex: 1;">
-                    <h4 style="margin: 0; font-size: 16px; font-weight: 600;">WHOIS Aktif</h4>
-                    <p style="margin: 6px 0 12px 0; font-size: 14px; opacity: 0.9; line-height: 1.4;">
-                        Artık WHOIS ile hızlı sorgulama yapabilirsiniz. Aramayı tekrar başlatın.
-                    </p>
-                    <div style="display: flex; gap: 8px;">
-                        <button onclick="window.globalRateLimitManager.hideRestartSuggestion()" 
-                                style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 13px; transition: all 0.2s;">
-                            Anladım
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(suggestionEl);
-
-        // 10 saniye sonra otomatik gizle
-        setTimeout(() => {
-            this.hideRestartSuggestion();
-        }, 10000);
-
-        console.log('💡 Restart suggestion displayed');
-    }
-
-    // Yeniden başlatma önerisini gizle
-    hideRestartSuggestion() {
-        const suggestionEl = document.getElementById('restart-suggestion');
-        if (suggestionEl) {
-            suggestionEl.style.animation = 'slideOutToBottom 0.3s ease-in forwards';
-            setTimeout(() => {
-                if (suggestionEl.parentNode) {
-                    suggestionEl.parentNode.removeChild(suggestionEl);
-                }
-            }, 300);
-        }
+        return hasRateLimitText || hasRateLimitStatus;
     }
 }
-
-// CSS animasyonları ekle
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-`;
-document.head.appendChild(style);
 
 // Global instance
 window.globalRateLimitManager = new GlobalRateLimitManager(); 

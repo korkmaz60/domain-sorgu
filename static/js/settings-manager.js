@@ -1,216 +1,302 @@
 // Ayarlar Yöneticisi - AI ve API ayarları yönetimi
 
 class SettingsManager {
-    constructor() {}
+    constructor() {
+        this.isInitialized = false;
+        this.initializeSettings();
+    }
 
-    loadAISettings() {
-        document.getElementById('api-key').value = window.domainSearch.aiConfig.apiKey;
-        document.getElementById('ai-model').value = window.domainSearch.aiConfig.model;
-        
-        // Search provider ayarlarını yükle
-        const providerRadio = document.querySelector(`input[name="search-api"][value="${window.domainSearch.searchConfig.provider}"]`);
-        if (providerRadio) {
-            providerRadio.checked = true;
+    async initializeSettings() {
+        try {
+            await this.loadStoredSettings();
+            this.setupEventListeners();
+            this.isInitialized = true;
+            console.log('✅ Settings Manager başlatıldı');
+        } catch (error) {
+            console.error('❌ Settings Manager başlatma hatası:', error);
         }
+    }
+
+    async loadStoredSettings() {
+        // DomainSearch henüz initialize olmamış olabilir, localStorage'dan oku
+        const godaddyApiKey = localStorage.getItem('godaddy_api_key') || '';
+        const godaddySecretKey = localStorage.getItem('godaddy_secret_key') || '';
         
-        // Porkbun ayarlarını yükle
-        const porkbunApiKeyInput = document.getElementById('porkbun-api-key');
-        const porkbunSecretKeyInput = document.getElementById('porkbun-secret-key');
-        
-        if (porkbunApiKeyInput) {
-            porkbunApiKeyInput.value = window.domainSearch.searchConfig.porkbunApiKey;
+        // GoDaddy ayarlarını yükle
+        const godaddyApiKeyInput = document.getElementById('godaddy-api-key');
+        const godaddySecretKeyInput = document.getElementById('godaddy-secret-key');
+
+        if (godaddyApiKeyInput) {
+            godaddyApiKeyInput.value = godaddyApiKey;
         }
-        
-        if (porkbunSecretKeyInput) {
-            porkbunSecretKeyInput.value = window.domainSearch.searchConfig.porkbunSecretKey;
+
+        if (godaddySecretKeyInput) {
+            godaddySecretKeyInput.value = godaddySecretKey;
         }
+
+        // API sağlayıcısı seçimini yükle
+        const savedProvider = localStorage.getItem('domain_search_provider') || 'whois';
+        const providerRadios = document.querySelectorAll('input[name="search-api"]');
         
-        // API provider değişiklik olaylarını dinle
-        document.querySelectorAll('input[name="search-api"]').forEach(radio => {
-            radio.addEventListener('change', (e) => this.handleApiProviderChange(e.target.value));
+        providerRadios.forEach(radio => {
+            if (radio.value === savedProvider) {
+                radio.checked = true;
+                this.showProviderSettings(savedProvider);
+            }
         });
+
+        // AI ayarlarını yükle
+        const aiEnabled = localStorage.getItem('ai_enabled') === 'true';
+        const openrouterApiKey = localStorage.getItem('openrouter_api_key') || '';
+        const aiModel = localStorage.getItem('ai_model') || '';
         
-        // İlk kez yüklendiğinde provider ayarını göster
-        this.handleApiProviderChange(window.domainSearch.searchConfig.provider);
-        
-        // Test connection butonunu dinle
-        const testConnectionBtn = document.getElementById('test-connection');
-        if (testConnectionBtn) {
-            testConnectionBtn.addEventListener('click', () => this.testAIConnection());
+        const aiToggle = document.getElementById('ai-toggle');
+        const openrouterApiKeyInput = document.getElementById('openrouter-api-key');
+        const aiModelSelect = document.getElementById('ai-model');
+
+        if (aiToggle) {
+            aiToggle.checked = aiEnabled;
         }
-        
-        // Toggle key visibility butonunu dinle
-        const toggleKeyBtn = document.getElementById('toggle-key-visibility');
-        if (toggleKeyBtn) {
-            toggleKeyBtn.addEventListener('click', () => this.toggleAPIKeyVisibility());
+
+        if (openrouterApiKeyInput) {
+            openrouterApiKeyInput.value = openrouterApiKey;
         }
-        
-        // Porkbun API key visibility toggle
-        const togglePorkbunKeyBtn = document.getElementById('toggle-porkbun-key-visibility');
-        if (togglePorkbunKeyBtn) {
-            togglePorkbunKeyBtn.addEventListener('click', () => this.togglePorkbunKeyVisibility());
-        }
-        
-        const togglePorkbunSecretBtn = document.getElementById('toggle-porkbun-secret-visibility');
-        if (togglePorkbunSecretBtn) {
-            togglePorkbunSecretBtn.addEventListener('click', () => this.togglePorkbunSecretVisibility());
+
+        if (aiModelSelect) {
+            aiModelSelect.value = aiModel;
         }
     }
 
-    saveAISettings() {
-        const apiKey = document.getElementById('api-key').value.trim();
-        const model = document.getElementById('ai-model').value;
-        const searchProvider = document.querySelector('input[name="search-api"]:checked')?.value || 'whois';
-        const porkbunApiKey = document.getElementById('porkbun-api-key')?.value.trim() || '';
-        const porkbunSecretKey = document.getElementById('porkbun-secret-key')?.value.trim() || '';
+    setupEventListeners() {
+        // GoDaddy API key visibility toggle
+        const toggleGodaddyKeyBtn = document.getElementById('toggle-godaddy-key-visibility');
+        if (toggleGodaddyKeyBtn) {
+            toggleGodaddyKeyBtn.addEventListener('click', () => this.toggleGodaddyKeyVisibility());
+        }
 
-        // AI ayarlarını kaydet
-        window.domainSearch.aiConfig.apiKey = apiKey;
-        window.domainSearch.aiConfig.model = model;
+        const toggleGodaddySecretBtn = document.getElementById('toggle-godaddy-secret-visibility');
+        if (toggleGodaddySecretBtn) {
+            toggleGodaddySecretBtn.addEventListener('click', () => this.toggleGodaddySecretVisibility());
+        }
+
+        // Ayarları kaydet butonu
+        const saveButton = document.getElementById('save-settings');
+        if (saveButton) {
+            saveButton.addEventListener('click', () => this.saveSettings());
+        }
+
+        // API sağlayıcı değişikliği
+        const providerRadios = document.querySelectorAll('input[name="search-api"]');
+        providerRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.showProviderSettings(e.target.value);
+            });
+        });
+
+        // Test bağlantısı butonu
+        const testButton = document.getElementById('test-connection');
+        if (testButton) {
+            testButton.addEventListener('click', () => this.testConnection());
+        }
+
+        // AI toggle
+        const aiToggle = document.getElementById('ai-toggle');
+        if (aiToggle) {
+            aiToggle.addEventListener('change', (e) => {
+                this.updateAISettings(e.target.checked);
+            });
+        }
+
+        console.log('⚙️ Settings event listener\'ları kuruldu');
+    }
+
+    // Eski adla uyumluluk için alias
+    async loadSettings() {
+        return this.loadStoredSettings();
+    }
+
+    async saveSettings() {
+        try {
+            const provider = document.querySelector('input[name="search-api"]:checked')?.value || 'whois';
+            const godaddyApiKey = document.getElementById('godaddy-api-key')?.value.trim() || '';
+            const godaddySecretKey = document.getElementById('godaddy-secret-key')?.value.trim() || '';
+            const aiEnabled = document.getElementById('ai-toggle')?.checked || false;
+            const openrouterApiKey = document.getElementById('openrouter-api-key')?.value.trim() || '';
+            const aiModel = document.getElementById('ai-model')?.value || '';
+
+            console.log('💾 Ayarlar kaydediliyor:', {
+                provider,
+                godaddyApiKeyLength: godaddyApiKey.length,
+                godaddySecretKeyLength: godaddySecretKey.length,
+                aiEnabled,
+                openrouterApiKeyLength: openrouterApiKey.length,
+                aiModel,
+                domainSearchExists: !!window.domainSearch,
+                domainSearchConfigExists: !!(window.domainSearch && window.domainSearch.searchConfig)
+            });
+
+            // Global config'i güncelle (eğer domainSearch varsa)
+            if (window.domainSearch && window.domainSearch.searchConfig) {
+                console.log('🔄 DomainSearch config güncelleniyor...');
+                window.domainSearch.searchConfig.provider = provider;
+                window.domainSearch.searchConfig.godaddyApiKey = godaddyApiKey;
+                window.domainSearch.searchConfig.godaddySecretKey = godaddySecretKey;
+                window.domainSearch.searchConfig.aiEnabled = aiEnabled;
+                window.domainSearch.searchConfig.openrouterApiKey = openrouterApiKey;
+                window.domainSearch.searchConfig.aiModel = aiModel;
+                
+                console.log('✅ DomainSearch config güncellendi:', {
+                    provider: window.domainSearch.searchConfig.provider,
+                    godaddyApiKeyLength: window.domainSearch.searchConfig.godaddyApiKey.length,
+                    godaddySecretKeyLength: window.domainSearch.searchConfig.godaddySecretKey.length
+                });
+            } else {
+                console.warn('⚠️ DomainSearch veya config mevcut değil!');
+            }
+
+            // Local storage'a kaydet
+            console.log('💾 LocalStorage\'a kaydediliyor...');
+            localStorage.setItem('domain_search_provider', provider);
+            localStorage.setItem('godaddy_api_key', godaddyApiKey);
+            localStorage.setItem('godaddy_secret_key', godaddySecretKey);
+            localStorage.setItem('ai_enabled', aiEnabled.toString());
+            localStorage.setItem('openrouter_api_key', openrouterApiKey);
+            localStorage.setItem('ai_model', aiModel);
+
+            // Başarı bildirimi
+            if (window.notificationManager) {
+                window.notificationManager.showSuccess('Ayarlar başarıyla kaydedildi!');
+            }
+
+            console.log('✅ Ayarlar kaydedildi:', {
+                provider,
+                godaddyApiKeyLength: godaddyApiKey.length,
+                godaddySecretKeyLength: godaddySecretKey.length,
+                aiEnabled,
+                openrouterApiKeyLength: openrouterApiKey.length,
+                aiModel
+            });
+
+        } catch (error) {
+            console.error('❌ Ayar kaydetme hatası:', error);
+            if (window.notificationManager) {
+                window.notificationManager.showError('Ayarlar kaydedilemedi!');
+            }
+        }
+    }
+
+    async testConnection() {
+        const provider = document.querySelector('input[name="search-api"]:checked')?.value;
         
-        // Search provider ayarlarını kaydet
-        window.domainSearch.searchConfig.provider = searchProvider;
-        window.domainSearch.searchConfig.porkbunApiKey = porkbunApiKey;
-        window.domainSearch.searchConfig.porkbunSecretKey = porkbunSecretKey;
-
-        // LocalStorage'a kaydet
-        localStorage.setItem('openrouter_api_key', apiKey);
-        localStorage.setItem('openrouter_model', model);
-        localStorage.setItem('search_provider', searchProvider);
-        localStorage.setItem('porkbun_api_key', porkbunApiKey);
-        localStorage.setItem('porkbun_secret_key', porkbunSecretKey);
-
-        // Modal'ı kapat
-        const modal = document.getElementById('settings-modal');
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-
-        // AI durumunu güncelle
-        if (apiKey && model) {
-            window.domainSearch.aiConfig.enabled = true;
-            localStorage.setItem('ai_enabled', 'true');
+        if (provider === 'godaddy') {
+            await this.testGodaddyConnection();
         } else {
-            // API key veya model eksikse AI'yı devre dışı bırak
-            window.domainSearch.aiConfig.enabled = false;
-            localStorage.setItem('ai_enabled', 'false');
+            if (window.notificationManager) {
+                window.notificationManager.showInfo('WHOIS için test gerekmez, doğrudan kullanılabilir.');
+            }
         }
-        
-        window.aiToggle.updateAIToggleUI();
-        window.notificationManager.showNotification('Ayarlar kaydedildi! ⚙️', 'success');
     }
 
-    async testAIConnection() {
-        const apiKey = document.getElementById('api-key').value.trim();
-        const model = document.getElementById('ai-model').value;
+    async testGodaddyConnection() {
+        const apiKey = document.getElementById('godaddy-api-key')?.value.trim();
+        const secretKey = document.getElementById('godaddy-secret-key')?.value.trim();
 
-        if (!apiKey || !model) {
-            window.notificationManager.showNotification('API anahtarı ve model seçimi gerekli!', 'warning');
+        if (!apiKey || !secretKey) {
+            if (window.notificationManager) {
+                window.notificationManager.showError('API Key ve Secret Key gerekli!');
+            }
             return;
         }
 
-        const testBtn = document.getElementById('test-connection');
-        const originalText = testBtn.innerHTML;
-        testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Test Ediliyor...';
-        testBtn.disabled = true;
-
+        const testButton = document.getElementById('test-connection');
+        const originalText = testButton.innerHTML;
+        
         try {
-            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            testButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Test ediliyor...';
+            testButton.disabled = true;
+
+            const response = await fetch('/api/test-godaddy', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json',
-                    'HTTP-Referer': window.location.origin,
-                    'X-Title': 'Domain Query App'
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: model,
-                    messages: [{ role: 'user', content: 'Test' }],
-                    max_tokens: 10
+                    api_key: apiKey,
+                    secret_key: secretKey
                 })
             });
 
-            if (response.ok) {
-                window.notificationManager.showNotification('✅ AI bağlantısı başarılı!', 'success');
+            const result = await response.json();
+
+            if (result.success) {
+                if (window.notificationManager) {
+                    window.notificationManager.showSuccess('GoDaddy API bağlantısı başarılı! ✅');
+                }
             } else {
-                const error = await response.json();
-                window.notificationManager.showNotification(`❌ Bağlantı hatası: ${error.error?.message || 'Bilinmeyen hata'}`, 'error');
+                if (window.notificationManager) {
+                    window.notificationManager.showError(`GoDaddy API Hatası: ${result.error}`);
+                }
             }
+
         } catch (error) {
-            window.notificationManager.showNotification(`❌ Bağlantı hatası: ${error.message}`, 'error');
+            console.error('❌ GoDaddy test hatası:', error);
+            if (window.notificationManager) {
+                window.notificationManager.showError('Bağlantı testi başarısız!');
+            }
         } finally {
-            testBtn.innerHTML = originalText;
-            testBtn.disabled = false;
+            testButton.innerHTML = originalText;
+            testButton.disabled = false;
         }
     }
 
-    toggleAPIKeyVisibility() {
-        const apiKeyInput = document.getElementById('api-key');
-        const toggleBtn = document.getElementById('toggle-key-visibility');
-        
-        if (apiKeyInput.type === 'password') {
-            apiKeyInput.type = 'text';
+    showProviderSettings(provider) {
+        // Tüm settings'leri gizle
+        const godaddySettings = document.getElementById('godaddy-settings');
+
+        if (provider === 'godaddy') {
+            godaddySettings.classList.remove('hidden');
+        } else {
+            godaddySettings.classList.add('hidden');
+        }
+    }
+
+    toggleGodaddyKeyVisibility() {
+        const godaddyKeyInput = document.getElementById('godaddy-api-key');
+        const toggleBtn = document.getElementById('toggle-godaddy-key-visibility');
+
+        if (godaddyKeyInput.type === 'password') {
+            godaddyKeyInput.type = 'text';
             toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
         } else {
-            apiKeyInput.type = 'password';
+            godaddyKeyInput.type = 'password';
             toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
         }
     }
 
-    handleApiProviderChange(provider) {
-        const porkbunSettings = document.getElementById('porkbun-settings');
+    toggleGodaddySecretVisibility() {
+        const godaddySecretInput = document.getElementById('godaddy-secret-key');
+        const toggleBtn = document.getElementById('toggle-godaddy-secret-visibility');
         
-        if (provider === 'porkbun') {
-            porkbunSettings.classList.remove('hidden');
-        } else {
-            porkbunSettings.classList.add('hidden');
-        }
-    }
-    
-    togglePorkbunKeyVisibility() {
-        const porkbunKeyInput = document.getElementById('porkbun-api-key');
-        const toggleBtn = document.getElementById('toggle-porkbun-key-visibility');
-        
-        if (porkbunKeyInput.type === 'password') {
-            porkbunKeyInput.type = 'text';
+        if (godaddySecretInput.type === 'password') {
+            godaddySecretInput.type = 'text';
             toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
         } else {
-            porkbunKeyInput.type = 'password';
-            toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
-        }
-    }
-    
-    togglePorkbunSecretVisibility() {
-        const porkbunSecretInput = document.getElementById('porkbun-secret-key');
-        const toggleBtn = document.getElementById('toggle-porkbun-secret-visibility');
-        
-        if (porkbunSecretInput.type === 'password') {
-            porkbunSecretInput.type = 'text';
-            toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
-        } else {
-            porkbunSecretInput.type = 'password';
+            godaddySecretInput.type = 'password';
             toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
         }
     }
 
-    // Provider'ı programatik olarak değiştir
-    updateProvider(provider) {
-        console.log(`🔄 Updating provider to: ${provider}`);
+    updateAISettings(enabled) {
+        window.domainSearch.searchConfig.aiEnabled = enabled;
+        localStorage.setItem('ai_enabled', enabled.toString());
         
-        // Radio button'ı seç
-        const providerRadio = document.querySelector(`input[name="search-api"][value="${provider}"]`);
-        if (providerRadio) {
-            providerRadio.checked = true;
+        if (window.aiToggle) {
+            window.aiToggle.updateUIState();
         }
         
-        // Config'i güncelle
-        window.domainSearch.searchConfig.provider = provider;
-        
-        // LocalStorage'a kaydet
-        localStorage.setItem('search_provider', provider);
-        
-        // UI'ı güncelle
-        this.handleApiProviderChange(provider);
-        
-        console.log(`✅ Provider updated to: ${provider}`);
+        console.log('🤖 AI ayarları güncellendi:', enabled);
     }
-} 
+}
+
+// Global olarak erişilebilir hale getir
+window.settingsManager = new SettingsManager(); 

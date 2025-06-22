@@ -131,7 +131,7 @@ Tamamen farklı ve yeni öneriler ver.`;
         }
 
         console.log('📤 OpenRouter API isteği gönderiliyor:', { model: window.domainSearch.aiConfig.model, prompt });
-        
+
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -254,27 +254,27 @@ Tamamen farklı ve yeni öneriler ver.`;
 
     // Direkt API çağrısı (AI için)
     async makeDirectAIAPICall(domain) {
-        const requestBody = { 
-            domain,
-            provider: window.domainSearch.searchConfig.provider
-        };
+            const requestBody = { 
+                domain,
+                provider: window.domainSearch.searchConfig.provider
+            };
 
-        if (window.domainSearch.searchConfig.provider === 'porkbun') {
-            requestBody.porkbunApiKey = window.domainSearch.searchConfig.porkbunApiKey;
-            requestBody.porkbunSecretKey = window.domainSearch.searchConfig.porkbunSecretKey;
-        }
+            if (window.domainSearch.searchConfig.provider === 'porkbun') {
+                requestBody.porkbunApiKey = window.domainSearch.searchConfig.porkbunApiKey;
+                requestBody.porkbunSecretKey = window.domainSearch.searchConfig.porkbunSecretKey;
+            }
 
         console.log(`🤖 AI making API call for: ${domain} via ${window.domainSearch.searchConfig.provider}`);
 
-        const response = await fetch('/api/check-domain', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody)
-        });
+            const response = await fetch('/api/check-domain', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
 
-        const result = await response.json();
+            const result = await response.json();
         console.log(`🤖 AI API response for ${domain}: ${result.status}`);
         
         return result;

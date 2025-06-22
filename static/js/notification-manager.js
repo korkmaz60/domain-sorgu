@@ -62,4 +62,20 @@ class NotificationManager {
                 return '<i class="fas fa-info-circle text-xl"></i>';
         }
     }
+
+    showSuccess(message) {
+        this.showNotification(message, 'success');
+    }
+
+    showError(message) {
+        this.showNotification(message, 'error');
+    }
+
+    showWarning(message) {
+        this.showNotification(message, 'warning');
+    }
+
+    showInfo(message) {
+        this.showNotification(message, 'info');
+    }
 } 

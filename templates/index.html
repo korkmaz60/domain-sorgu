@@ -468,93 +468,87 @@
                         Arama API Sağlayıcısı
                     </label>
                     <div class="space-y-3">
-                        <label class="flex items-center p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-primary-300 transition-colors">
+                        <label class="api-option flex items-center space-x-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
                             <input type="radio" name="search-api" value="whois" checked class="w-4 h-4 text-primary-600 focus:ring-primary-500">
-                            <div class="ml-3">
-                                <div class="flex items-center">
-                                    <i class="fas fa-globe mr-2 text-blue-500"></i>
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-globe text-blue-500"></i>
+                                <div>
                                     <span class="font-medium">WHOIS (Varsayılan)</span>
+                                    <div class="text-sm text-gray-500">Ücretsiz WHOIS protokolü</div>
                                 </div>
-                                <p class="text-sm text-gray-500 mt-1">Ücretsiz WHOIS protokolü kullanılır</p>
                             </div>
                         </label>
-                        
-                        <label class="flex items-center p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-primary-300 transition-colors">
-                            <input type="radio" name="search-api" value="porkbun" class="w-4 h-4 text-primary-600 focus:ring-primary-500">
-                            <div class="ml-3">
-                                <div class="flex items-center">
-                                    <i class="fas fa-rocket mr-2 text-green-500"></i>
-                                    <span class="font-medium">Porkbun API</span>
+
+                        <label class="api-option flex items-center space-x-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-yellow-300 transition-colors">
+                            <input type="radio" name="search-api" value="godaddy" class="w-4 h-4 text-primary-600 focus:ring-primary-500">
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-rocket text-yellow-500"></i>
+                                <div>
+                                    <span class="font-medium">GoDaddy API (OTE Test)</span>
+                                    <div class="text-sm text-gray-500">Test ortamında hızlı sonuçlar</div>
                                 </div>
-                                <p class="text-sm text-gray-500 mt-1">Daha hızlı ve güvenilir sonuçlar</p>
                             </div>
                         </label>
-                    </div>
-                </div>
 
-                <!-- Porkbun Settings -->
-                <div id="porkbun-settings" class="space-y-4 hidden">
-                    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                        <div class="flex items-start space-x-3">
-                            <i class="fas fa-exclamation-triangle text-yellow-500 mt-1"></i>
-                            <div class="text-yellow-700 text-sm">
-                                <p class="font-medium mb-1">Porkbun API Anahtarları</p>
-                                <p>Porkbun hesabınızdan API anahtarlarınızı alabilirsiniz:</p>
-                                <a href="https://porkbun.com/account/api" target="_blank" class="text-yellow-600 hover:underline font-medium">
-                                    porkbun.com/account/api
-                                </a>
+                        <!-- GoDaddy Settings -->
+                        <div id="godaddy-settings" class="space-y-4 hidden">
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                                <div class="flex items-start space-x-3">
+                                    <i class="fas fa-key text-yellow-500 mt-1"></i>
+                                    <div class="text-yellow-700">
+                                        <p class="font-medium mb-1">GoDaddy API Anahtarları</p>
+                                        <p>GoDaddy hesabınızdan API anahtarlarınızı alabilirsiniz:</p>
+                                        <a href="https://developer.godaddy.com/keys" target="_blank" class="text-yellow-600 hover:underline font-medium">
+                                            developer.godaddy.com/keys
+                                        </a>
+                                        <p class="text-sm mt-2">🧪 Bu sistem OTE (Test) ortamını kullanır - OTE anahtarlarınızı girin</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                                    <div class="relative">
+                                        <input type="password" id="godaddy-api-key" placeholder="GoDaddy API Key'inizi girin" class="w-full pr-12 pl-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300">
+                                        <button type="button" id="toggle-godaddy-key-visibility" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Secret Key</label>
+                                    <div class="relative">
+                                        <input type="password" id="godaddy-secret-key" placeholder="GoDaddy Secret Key'inizi girin" class="w-full pr-12 pl-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300">
+                                        <button type="button" id="toggle-godaddy-secret-visibility" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 rounded-xl p-4">
+                            <div class="text-sm text-gray-600 space-y-1">
+                                <p><strong>WHOIS:</strong> Ücretsiz, bazen sınırlı bilgi</p>
+                                <p><strong>GoDaddy OTE:</strong> Test ortamında hızlı sonuçlar, OTE API anahtarı gerektirir</p>
+                                <p class="text-blue-600 mt-2"><strong>🧪 OTE Nedir:</strong> GoDaddy'nin test ortamı - gerçek domain satın alma işlemi yapmaz</p>
                             </div>
                         </div>
                     </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-key mr-2 text-primary-500"></i>
-                            API Key
-                        </label>
-                        <div class="relative">
-                            <input type="password" id="porkbun-api-key" placeholder="Porkbun API Key'inizi girin" class="w-full pr-12 pl-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300">
-                            <button type="button" id="toggle-porkbun-key-visibility" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-shield-alt mr-2 text-primary-500"></i>
-                            Secret Key
-                        </label>
-                        <div class="relative">
-                            <input type="password" id="porkbun-secret-key" placeholder="Porkbun Secret Key'inizi girin" class="w-full pr-12 pl-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300">
-                            <button type="button" id="toggle-porkbun-secret-visibility" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                    </div>
                 </div>
 
-                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <div class="flex items-start space-x-3">
-                        <i class="fas fa-info-circle text-blue-500 mt-1"></i>
-                        <div class="text-blue-700 text-sm">
-                            <p class="font-medium mb-1">API Sağlayıcı Bilgileri</p>
-                            <p><strong>WHOIS:</strong> Ücretsiz ancak bazen yavaş olabilir</p>
-                            <p><strong>Porkbun:</strong> Daha hızlı ve güvenilir, API anahtarı gerektirir</p>
-                        </div>
-                    </div>
+                <div class="flex space-x-3 p-6 border-t border-gray-200">
+                    <button id="test-connection" class="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center justify-center space-x-2">
+                        <i class="fas fa-vial"></i>
+                        <span>Test Et</span>
+                    </button>
+                    <button id="save-settings" class="flex-1 px-4 py-2 gradient-primary text-white rounded-lg hover:shadow-lg transition-all duration-300 flex items-center justify-center space-x-2">
+                        <i class="fas fa-save"></i>
+                        <span>Kaydet</span>
+                    </button>
                 </div>
-            </div>
-
-            <div class="flex space-x-3 p-6 border-t border-gray-200">
-                <button id="test-connection" class="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center justify-center space-x-2">
-                    <i class="fas fa-vial"></i>
-                    <span>Test Et</span>
-                </button>
-                <button id="save-settings" class="flex-1 px-4 py-2 gradient-primary text-white rounded-lg hover:shadow-lg transition-all duration-300 flex items-center justify-center space-x-2">
-                    <i class="fas fa-save"></i>
-                    <span>Kaydet</span>
-                </button>
             </div>
         </div>
     </div>
